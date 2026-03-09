@@ -5,8 +5,32 @@ import numpy as np
 import json
 import folium
 from streamlit_folium import st_folium
+from pyproj import Transformer
 
-# --- 1. FUNGSI LOGIN ---
+# --- 1. FUNGSI PENUKARAN KOORDINAT (CASSINI KE WGS84) ---
+# Senarai EPSG Cassini Negeri di Malaysia
+CASSINI_SYSTEMS = {
+    "Selangor/KL": "EPSG:3160",
+    "Johor": "EPSG:3168",
+    "Kedah": "EPSG:3167",
+    "Kelantan": "EPSG:3166",
+    "Melaka/N.Sembilan": "EPSG:3161",
+    "Pahang": "EPSG:3164",
+    "Perak": "EPSG:3162",
+    "Perlis": "EPSG:3169",
+    "Pulau Pinang": "EPSG:3163",
+    "Terengganu": "EPSG:3165"
+}
+
+def convert_to_wgs84(df, system_code):
+    # Tukar Cassini (Meter) ke WGS84 (Lat/Lon)
+    transformer = Transformer.from_crs(system_code, "EPSG:4321", always_xy=True)
+    lon, lat = transformer.transform(df['E'].values, df['N'].values)
+    df['lat_wgs84'] = lat
+    df['lon_wgs84'] = lon
+    return df
+
+# --- 2. FUNGSI LOGIN ---
 def login():
     if 'logged_in' not in st.session_state:
         st.session_state['logged_in'] = False
@@ -25,6 +49,7 @@ def login():
         return False
     return True
 
+# --- 3. ATURCARA UTAMA ---
 if login():
     if st.sidebar.button("Log Keluar"):
         st.session_state['logged_in'] = False
@@ -34,94 +59,73 @@ if login():
 
     st.sidebar.header("Muat Naik Data")
     uploaded_file = st.sidebar.file_uploader("Pilih fail CSV anda", type="csv")
-
-    # Nilai default
-    df = None
-    area = 0
     
+    # Pilihan Sistem Koordinat
+    selected_state = st.sidebar.selectbox("Pilih Sistem Koordinat (Negeri):", list(CASSINI_SYSTEMS.keys()))
+    system_epsg = CASSINI_SYSTEMS[selected_state]
+
+    df = None
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         if 'E' in df.columns and 'N' in df.columns:
-            df['E'] = pd.to_numeric(df['E'])
-            df['N'] = pd.to_numeric(df['N'])
-            
-            # --- PENGESAHAN KOORDINAT ---
-            # Jika nilai > 500, ia mungkin meter (RSO/Cassini). 
-            # Google Folium perlukan Lat/Lon (contoh: 3.123, 101.123)
-            is_meter = df['E'].iloc[0] > 500 
-            
-            # Kira Luas (Formula Shoelace)
-            e = df['E'].values
-            n = df['N'].values
-            area = 0.5 * np.abs(np.dot(e, np.roll(n, 1)) - np.dot(n, np.roll(e, 1)))
+            # Tukar koordinat meter ke Lat/Lon
+            try:
+                df = convert_to_wgs84(df, system_epsg)
+                
+                # Kira Luas (Guna koordinat asal E, N dalam meter)
+                e = df['E'].values
+                n = df['N'].values
+                area = 0.5 * np.abs(np.dot(e, np.roll(n, 1)) - np.dot(n, np.roll(e, 1)))
 
-            # Pusat Peta
-            center_lat = df['N'].mean()
-            center_lon = df['E'].mean()
+                # Pusat Peta (Guna Lat/Lon yang baru ditukar)
+                center_lat = df['lat_wgs84'].mean()
+                center_lon = df['lon_wgs84'].mean()
 
-            st.write("### 🌍 Pandangan Satelit Google")
-
-            # Bina Peta
-            m = folium.Map(
-                location=[center_lat, center_lon], 
-                zoom_start=19, 
-                max_zoom=22
-            )
-
-            # Tambah Google Satellite Layer
-            folium.TileLayer(
-                tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-                attr='Google Satellite',
-                name='Google Satellite',
-                max_zoom=22,
-                overlay=False
-            ).add_to(m)
-
-            # Plot Poligon
-            coords_poly = [[row['N'], row['E']] for i, row in df.iterrows()]
-            folium.Polygon(
-                locations=coords_poly,
-                color="yellow",
-                weight=4,
-                fill=True,
-                fill_color="yellow",
-                fill_opacity=0.4,
-                popup=f"Luas: {area:.2f} m²"
-            ).add_to(m)
-
-            # Plot Marker
-            for i, row in df.iterrows():
-                folium.CircleMarker(
-                    location=[row['N'], row['E']],
-                    radius=5,
-                    color="red",
-                    fill=True,
-                    fill_color="white",
-                    popup=f"STN: {i+1}"
+                st.write(f"### 🌍 Pandangan Satelit - {selected_state}")
+                
+                # Bina Peta
+                m = folium.Map(location=[center_lat, center_lon], zoom_start=19, max_zoom=22)
+                
+                # Google Satellite Layer
+                folium.TileLayer(
+                    tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+                    attr='Google', name='Google Satellite', max_zoom=22, overlay=False
                 ).add_to(m)
 
-            # Paparkan Peta
-            # fit_bounds memastikan peta zoom automatik ke poligon
-            m.fit_bounds(coords_poly)
-            st_folium(m, width=1000, height=600, key="map_updated")
+                # Plot Poligon (Guna lat_wgs84, lon_wgs84)
+                coords_poly = [[row['lat_wgs84'], row['lon_wgs84']] for i, row in df.iterrows()]
+                folium.Polygon(
+                    locations=coords_poly, color="yellow", weight=3,
+                    fill=True, fill_color="yellow", fill_opacity=0.3,
+                    popup=f"Luas: {area:.2f} m²"
+                ).add_to(m)
 
-            # Paparan Teknikal
-            st.write("---")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("### 📋 Data")
-                st.dataframe(df)
-                st.metric("Luas Keseluruhan", f"{area:.3f} m²")
-            with col2:
-                st.write("### 📐 Pelan")
-                fig, ax = plt.subplots()
-                e_p = df['E'].tolist() + [df['E'][0]]
-                n_p = df['N'].tolist() + [df['N'][0]]
-                ax.plot(e_p, n_p, 'y-o', linewidth=2)
-                ax.fill(e_p, n_p, color='yellow', alpha=0.3)
-                ax.set_aspect('equal')
-                st.pyplot(fig)
+                # Plot Marker
+                for i, row in df.iterrows():
+                    folium.CircleMarker(
+                        location=[row['lat_wgs84'], row['lon_wgs84']],
+                        radius=4, color="red", fill=True, popup=f"STN: {i+1}"
+                    ).add_to(m)
+
+                m.fit_bounds(coords_poly)
+                st_folium(m, width=1000, height=500, key="map")
+
+                # Bahagian Data
+                st.write("---")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("### 📋 Data (WGS84)")
+                    st.dataframe(df[['STN', 'lat_wgs84', 'lon_wgs84']])
+                    st.metric("Luas (m²)", f"{area:.3f}")
+                with col2:
+                    st.write("### 📐 Pelan Teknikal")
+                    fig, ax = plt.subplots()
+                    ax.plot(df['E'].tolist()+[df['E'][0]], df['N'].tolist()+[df['N'][0]], 'b-o')
+                    ax.set_aspect('equal')
+                    st.pyplot(fig)
+            except Exception as e:
+                st.error(f"Ralat penukaran: {e}")
         else:
-            st.error("Fail CSV mesti mempunyai kolum 'E' dan 'N'!")
+            st.error("Pastikan CSV ada kolum E dan N!")
     else:
-        st.info("Sila muat naik fail CSV untuk melihat data di atas satelit.")
+        st.info("Sila muat naik CSV dan pilih negeri untuk melihat lot di atas satelit.")

@@ -27,66 +27,67 @@ def login():
         return False
     return True
 
-# Fungsi Penukaran DMS
-def to_dms(deg):
-    d = int(deg)
-    m = int((deg - d) * 60)
-    s = int((deg - d - m/60) * 3600)
-    return f"{d}°{m}'{s}\""
-
-# --- 2. ATURCARA UTAMA (SELEPAS LOGIN) ---
+# --- 2. ATURCARA UTAMA ---
 if login():
-    # Butang Log Keluar di Sidebar
     if st.sidebar.button("Log Keluar"):
         st.session_state['logged_in'] = False
         st.rerun()
 
     st.title("Sistem Visualisasi Lot & Satelit Google")
 
-    # Bahagian Muat Naik Fail di Sidebar
     st.sidebar.header("Muat Naik Data")
     uploaded_file = st.sidebar.file_uploader("Pilih fail CSV anda", type="csv")
 
-    # Inisialisasi Lokasi Lalai (Kuala Lumpur) jika tiada data
-    default_lat, default_lon = 3.1390, 101.6869
-    zoom_level = 6  # Pandangan jauh Malaysia pada mulanya
+    # Lokasi default jika tiada fail
+    default_lat, default_lon = 4.2105, 101.9758 # Tengah Malaysia
+    zoom_level = 6
 
     df = None
     area = 0
+    bounds = None
+
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         if 'E' in df.columns and 'N' in df.columns:
-            # Gunakan min purata koordinat sebagai pusat peta
+            # Pastikan data adalah float
+            df['E'] = df['E'].astype(float)
+            df['N'] = df['N'].astype(float)
+            
             default_lat = df['N'].mean()
             default_lon = df['E'].mean()
-            zoom_level = 19 # Zoom sangat dekat apabila data masuk
+            zoom_level = 19 # Zoom dekat
             
-            # Pengiraan Luas
+            # Kira Luas (Formula Shoelace)
             e = df['E'].values
             n = df['N'].values
             area = 0.5 * np.abs(np.dot(e, np.roll(n, 1)) - np.dot(n, np.roll(e, 1)))
+            
+            # Dapatkan sempadan untuk Auto-Zoom
+            bounds = [[df['N'].min(), df['E'].min()], [df['N'].max(), df['E'].max()]]
 
-    # --- 3. PAPARAN PETA SATELIT (SENTIASA DIPAPARKAN) ---
     st.write("### 🌍 Pandangan Satelit Google")
     
-    # Bina Peta Folium
-    # max_zoom=22 membolehkan zoom paling dekat dengan permukaan bumi
-    m = folium.Map(location=[default_lat, default_lon], zoom_start=zoom_level, max_zoom=22)
+    # Bina Peta
+    m = folium.Map(
+        location=[default_lat, default_lon], 
+        zoom_start=zoom_level, 
+        max_zoom=22,
+        control_scale=True
+    )
 
-    # Masukkan Layer Google Satellite melalui HTML Tile
-    folium.TileLayer(
+    # Tambah Google Satellite Layer
+    google_satellite = folium.TileLayer(
         tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        attr='Google Satellite',
+        attr='Google',
         name='Google Satellite',
         overlay=False,
         control=True,
         max_zoom=22
     ).add_to(m)
 
-    # Jika CSV berjaya dimuat naik, cantumkan poligon ke dalam peta satelit
     if df is not None:
-        coords_poly = [[df['N'][i], df['E'][i]] for i in range(len(df))]
-        # Tambah Poligon Kuning
+        # Plot Poligon
+        coords_poly = [[row['N'], row['E']] for i, row in df.iterrows()]
         folium.Polygon(
             locations=coords_poly,
             color="yellow",
@@ -94,51 +95,41 @@ if login():
             fill=True,
             fill_color="yellow",
             fill_opacity=0.3,
-            popup=f"Luas Lot: {area:.3f} m²"
+            popup=f"Luas: {area:.2f} m²"
         ).add_to(m)
         
-        # Tambah Marker untuk setiap stesen
+        # Plot Marker Stesen
         for i, row in df.iterrows():
             folium.CircleMarker(
                 location=[row['N'], row['E']],
-                radius=3,
+                radius=4,
                 color="red",
                 fill=True,
+                fill_color="white",
                 popup=f"STN: {row.get('STN', i+1)}"
             ).add_to(m)
+        
+        # AUTO ZOOM ke poligon
+        if bounds:
+            m.fit_bounds(bounds)
 
-    # Paparkan Peta folium dalam Streamlit
-    st_folium(m, width=1000, height=600, returned_objects=[])
+    # Paparkan Peta (Gunakan 'key' supaya peta refresh bila file tukar)
+    st_folium(m, width=1000, height=500, key="peta_ukur")
 
-    # --- 4. PAPARAN DATA TEKNIKAL (HANYA JIKA CSV DIBUKA) ---
+    # --- Bahagian Data & Matplotlib ---
     if df is not None:
         st.write("---")
         col1, col2 = st.columns([1, 1])
-        
         with col1:
-            st.write("### 📋 Pratinjau Data:")
+            st.write("### 📋 Data Koordinat")
             st.dataframe(df)
             st.metric("Jumlah Luas", f"{area:.3f} m²")
-
         with col2:
-            st.write("### 📐 Pelan Teknikal (Matplotlib):")
-            fig, ax = plt.subplots(figsize=(8, 8))
+            st.write("### 📐 Pelan Teknikal")
+            fig, ax = plt.subplots()
             e_p = df['E'].tolist() + [df['E'][0]]
             n_p = df['N'].tolist() + [df['N'][0]]
-            ax.plot(e_p, n_p, marker='o', color='b', linewidth=2)
-            ax.fill(e_p, n_p, alpha=0.2, color='skyblue')
+            ax.plot(e_p, n_p, 'b-o')
+            ax.fill(e_p, n_p, alpha=0.3)
             ax.set_aspect('equal')
-            ax.grid(True, linestyle=':', alpha=0.6)
             st.pyplot(fig)
-
-        # Butang Export GeoJSON
-        poly_coords_json = [[df['E'][i], df['N'][i]] for i in range(len(df))] + [[df['E'][0], df['N'][0]]]
-        features = [{
-            "type": "Feature",
-            "properties": {"Luas_m2": area},
-            "geometry": {"type": "Polygon", "coordinates": [poly_coords_json]}
-        }]
-        geojson_string = json.dumps({"type": "FeatureCollection", "features": features})
-        st.sidebar.download_button("📥 Muat Turun GeoJSON", geojson_string, file_name="lot_tanah.geojson")
-    else:
-        st.info("Sila muat naik fail CSV di bahagian sidebar untuk memaparkan poligon di atas satelit.")

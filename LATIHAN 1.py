@@ -12,6 +12,47 @@ from pyproj import Transformer
 # Set layout halaman
 st.set_page_config(page_title="Sistem Survey Lot PUO", layout="wide")
 
+# ================== CSS UNTUK FRAME & GAYA (STYLING) ==================
+st.markdown("""
+    <style>
+        /* Frame untuk Sidebar */
+        [data-testid="stSidebar"] {
+            background-color: #f8f9fa;
+            border-right: 5px solid #0083B0;
+        }
+        
+        /* Frame untuk Header Utama */
+        .header-container {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border: 2px solid #0083B0;
+            margin-bottom: 20px;
+        }
+
+        /* Gaya untuk Kotak Nama Sidebar */
+        .sidebar-name-card {
+            background: linear-gradient(135deg, #00B4DB, #0083B0);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            border: 3px solid #ffffff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            margin-top: -10px;
+        }
+
+        /* Frame Gambar Profil */
+        .profile-frame {
+            border: 4px solid #0083B0;
+            border-radius: 10px;
+            padding: 5px;
+            background: white;
+            display: inline-block;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # ================== FUNGSI TUKAR DMS ==================
 def format_dms(decimal_degree):
     d = int(decimal_degree)
@@ -59,110 +100,109 @@ def check_password():
 if check_password():
     
     # --- 👤 PROFIL PENGGUNA (SIDEBAR) ---
-    # 1. Ruangan Gambar di Atas
-    if os.path.exists("profile.jpg"):
-        st.sidebar.image("profile.jpg", use_container_width=True)
-    else:
-        st.sidebar.warning("📸 Fail 'profile.jpg' tidak dijumpai.")
+    with st.sidebar:
+        # 1. Gambar Profil dengan Frame
+        if os.path.exists("profile.jpg"):
+            st.image("profile.jpg", use_container_width=True)
+        else:
+            st.warning("📸 Sila upload 'profile.jpg'.")
 
-    # 2. Ruangan (Kotak) Nama di Bawah Gambar
-    st.sidebar.markdown(
-        """
-        <div style="background: linear-gradient(135deg, #00B4DB, #0083B0); padding: 15px; border-radius: 10px; text-align: center; border: 2px solid #ffffff;">
-            <h4 style="color: white; margin: 0; font-family: sans-serif; font-size: 0.9em;">MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI</h4>
-            <hr style="margin: 8px 0; border: 0.5px solid rgba(255,255,255,0.3);">
-            <p style="color: #f0f0f0; font-size: 0.75em; margin-bottom: 0px;">Surveyor Berdaftar (ID: 1)</p>
-        </div>
-        <br>
-        """, unsafe_allow_html=True
-    )
+        # 2. Kotak Nama Berbingkai
+        st.markdown(
+            """
+            <div class="sidebar-name-card">
+                <h4 style="color: white; margin: 0; font-family: 'Segoe UI', sans-serif; font-size: 0.9em; font-weight: bold;">MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI</h4>
+                <p style="color: #e0f7fa; font-size: 0.75em; margin-top: 5px; margin-bottom: 0px; letter-spacing: 1px;">SURVEYOR BERDAFTAR (ID: 1)</p>
+            </div>
+            <br>
+            """, unsafe_allow_html=True
+        )
 
-    # --- BAHAGIAN HEADER UTAMA ---
+    # --- BAHAGIAN HEADER UTAMA DENGAN FRAME ---
+    st.markdown('<div class="header-container">', unsafe_allow_html=True)
     col_logo, col_text, col_profile_img = st.columns([1, 3.5, 0.8])
     
     with col_logo:
         if os.path.exists("Poli_Logo.png"):
-            st.image("Poli_Logo.png", width=140)
+            st.image("Poli_Logo.png", width=130)
         else:
-            st.info("🏢 PUO")
+            st.markdown("<h2 style='color:#0083B0;'>PUO</h2>", unsafe_allow_html=True)
 
     with col_text:
         st.markdown("""
-            <style>
-                .main-title { font-family: 'Arial Black', sans-serif; font-size: 38px; font-weight: 900; color: #1E1E1E; margin-bottom: -10px; }
-                .sub-title { font-size: 16px; color: #555; }
-                .name-box { background-color: #f0f2f6; padding: 10px; border-radius: 8px; border-left: 5px solid #0083B0; margin-top: 10px; }
-            </style>
             <div>
-                <h1 class="main-title">SISTEM SURVEY LOT</h1>
-                <p class="sub-title">Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
-                <div class="name-box">
-                    <span style="color: #333; font-weight: bold;">PENGENDALI:</span> 
-                    <span style="color: #0083B0; font-weight: 800;">MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI</span>
+                <h1 style="font-family: 'Arial Black', sans-serif; font-size: 40px; font-weight: 900; color: #1E1E1E; margin-bottom: -5px;">SISTEM SURVEY LOT</h1>
+                <p style="font-size: 16px; color: #555; margin-bottom: 15px;">Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
+                <div style="background-color: #e3f2fd; padding: 12px; border-radius: 8px; border-left: 6px solid #0083B0;">
+                    <span style="color: #333; font-weight: bold; font-size: 0.9em;">PENGENDALI SISTEM:</span><br>
+                    <span style="color: #0083B0; font-weight: 800; font-size: 1.2em;">MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI</span>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 
     with col_profile_img:
-        # Gambar kecil di header (atas kanan)
         if os.path.exists("profile.jpg"):
-            st.markdown('<div style="text-align: right;">', unsafe_allow_html=True)
+            st.markdown('<div class="profile-frame">', unsafe_allow_html=True)
             st.image("profile.jpg", width=100)
             st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown("<hr style='border: 1px solid #eee; margin-top: 15px;'>", unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # ================== SIDEBAR SETTINGS ==================
     st.sidebar.header("⚙️ Tetapan Paparan")
-    uploaded_file = st.sidebar.file_uploader("Upload fail CSV", type=["csv"])
+    uploaded_file = st.sidebar.file_uploader("Muat Naik Fail CSV Koordinat", type=["csv"])
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("🌍 Mod Peta Interaktif")
+    st.sidebar.subheader("🌍 Konfigurasi Peta")
     show_interactive_map = st.sidebar.toggle("Aktifkan Peta Google", value=True)
     map_provider = st.sidebar.radio("Pilih Jenis Peta:", ["Satelit (Hybrid)", "Standard Map"], index=0, disabled=not show_interactive_map)
 
     # --- PILIHAN WARNA & GAYA ---
     st.sidebar.markdown("---")
-    st.sidebar.subheader("🎨 Estetika Pelan")
+    st.sidebar.subheader("🎨 Estetika Visual")
     poly_color = st.sidebar.color_picker("Warna Kawasan", "#6036AF") 
     line_color = st.sidebar.color_picker("Warna Sempadan", "#FFFF00") 
-    poly_opacity = st.sidebar.slider("Kelegapan", 0.0, 1.0, 0.3)
+    poly_opacity = st.sidebar.slider("Tahap Kelegapan", 0.0, 1.0, 0.4)
 
-    # ... (Bahagian kod selebihnya kekal sama seperti sebelum ini) ...
-    # Saya ringkaskan bahagian bawah untuk menjimatkan ruang, anda boleh teruskan guna logic data anda
-    
+    # ================== LOGIK DATA ==================
     if uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file)
             if all(col in df.columns for col in ['STN', 'E', 'N']):
+                # Penukaran Koordinat (Cassini Perak ke WGS84)
                 transformer = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
                 df['lon'], df['lat'] = transformer.transform(df['E'].values, df['N'].values)
                 
-                coords_en = list(zip(df['E'], df['N']))
-                coords_ll = list(zip(df['lon'], df['lat']))
-                poly_geom = Polygon(coords_en)
-                poly_ll = Polygon(coords_ll) 
+                poly_geom = Polygon(list(zip(df['E'], df['N'])))
                 area = poly_geom.area
 
-                # METRIK
-                st.markdown("### 📊 Ringkasan Lot")
+                # Paparan Ringkasan dalam Kad
+                st.markdown("### 📊 Analisis Data Lot")
                 c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Luas (m²)", f"{area:.2f}")
-                c2.metric("Luas (Ekar)", f"{area/4046.856:.4f}")
-                c3.metric("Stesen", len(df))
-                c4.metric("Status", "Tutup")
+                with c1: st.info(f"**Luas (m²)**\n\n{area:.2f}")
+                with c2: st.info(f"**Luas (Ekar)**\n\n{area/4046.856:.4f}")
+                with c3: st.info(f"**Bil. Stesen**\n\n{len(df)}")
+                with c4: st.success(f"**Status**\n\nTutup")
 
                 st.markdown("---")
-                # Kod visualisasi peta anda di sini...
-                if show_interactive_map:
-                    m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19)
-                    folium.Polygon(locations=[[r['lat'], r['lon']] for _, r in df.iterrows()], color=line_color, fill=True, fill_color=poly_color, fill_opacity=poly_opacity).add_to(m)
-                    folium_static(m, width=1000, height=600)
                 
-                st.subheader("📋 Jadual Data")
+                if show_interactive_map:
+                    st.subheader("🗺️ Visualisasi Peta Interaktif")
+                    m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19)
+                    folium.Polygon(
+                        locations=[[r['lat'], r['lon']] for _, r in df.iterrows()],
+                        color=line_color,
+                        fill=True,
+                        fill_color=poly_color,
+                        fill_opacity=poly_opacity,
+                        weight=5
+                    ).add_to(m)
+                    folium_static(m, width=1100, height=600)
+                
+                st.subheader("📋 Jadual Data Koordinat")
                 st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']], use_container_width=True)
 
         except Exception as e:
-            st.error(f"Ralat: {e}")
+            st.error(f"⚠️ Ralat teknikal dikesan: {e}")
     else:
-        st.info("👋 Sila muat naik fail CSV untuk melihat hasil.")
+        st.info("💡 Sila muat naik fail CSV di sidebar untuk memulakan sistem.")

@@ -21,41 +21,69 @@ def get_base64(bin_file):
 
 bg_img = get_base64("RUANG.jfif")
 
-# 3. CSS - FOKUS WARNA HITAM DI SIDEBAR
+# 3. CSS - MEMBERSIHKAN RUANGAN & TEMA WARNA
 st.markdown(f"""
     <style>
+        /* Background Utama */
         .stApp {{
-            background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url("data:image/jfif;base64,{bg_img}");
+            background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url("data:image/jfif;base64,{bg_img}");
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
         }}
+        
+        /* SIDEBAR Style */
         [data-testid="stSidebar"] {{
             background-color: rgba(248, 249, 250, 0.95);
             border-right: 5px solid #0083B0;
         }}
-        [data-testid="stSidebar"] .stText, 
-        [data-testid="stSidebar"] label, 
-        [data-testid="stSidebar"] p, 
-        [data-testid="stSidebar"] h1, 
-        [data-testid="stSidebar"] h2, 
-        [data-testid="stSidebar"] h3, 
-        [data-testid="stSidebar"] .stMarkdown p {{
+        [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] h3 {{
             color: #000000 !important;
             font-weight: 600 !important;
         }}
-        .header-container {{
-            background: rgba(255, 255, 255, 0.9);
+
+        /* HEADER - Membuang kotak putih & Center teks */
+        .header-clean {{
+            text-align: center;
             padding: 20px;
-            border-radius: 15px;
-            border: 2px solid #0083B0;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }}
+        .header-clean h1 {{
+            color: white !important;
+            font-size: 3em !important;
+            text-shadow: 2px 2px 10px rgba(0,0,0,0.8);
+            margin-bottom: 0px;
+        }}
+        .header-clean p {{
+            color: #f0f0f0 !important;
+            font-size: 1.2em;
+            text-shadow: 1px 1px 5px rgba(0,0,0,0.8);
+        }}
+        .header-clean .pengendali {{
+            color: #00d4ff !important;
+            font-weight: bold;
+            font-size: 1.3em;
+            margin-top: 10px;
+        }}
+
+        /* Data Card - Transparan tapi boleh dibaca */
         .data-card {{
-            background: rgba(255, 255, 255, 0.9);
-            padding: 20px;
-            border-radius: 12px;
-            color: black !important;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white !important;
+        }}
+        
+        /* Baiki warna teks dalam metrik supaya putih */
+        [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {{
+            color: white !important;
+        }}
+        
+        /* Buang padding berlebihan di atas */
+        .block-container {{
+            padding-top: 2rem !important;
         }}
     </style>
 """, unsafe_allow_html=True)
@@ -89,7 +117,7 @@ if not st.session_state.auth:
 with st.sidebar:
     if os.path.exists("image_b5be5f.jpg"):
         st.image("image_b5be5f.jpg")
-    st.markdown("<h3 style='text-align:center; color:white; background:#0083B0; padding:10px; border-radius:10px;'>MUHAMMAD ANIQ IRFAN</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align:center; color:white !important; background:#0083B0; padding:10px; border-radius:10px;'>MUHAMMAD ANIQ IRFAN</h3>", unsafe_allow_html=True)
     
     st.write("### ⚙️ Tetapan Peta")
     map_type = st.radio("Pilih Mod Peta:", ["Satellite", "Street View"])
@@ -102,19 +130,14 @@ with st.sidebar:
     st.write("### 📂 Muat Naik Data")
     uploaded_file = st.file_uploader("Pilih fail CSV anda", type=["csv"])
 
-# 7. HEADER UTAMA
-st.markdown('<div class="header-container">', unsafe_allow_html=True)
-c1, c2 = st.columns([4, 1])
-with c1:
-    st.markdown("""
-        <h1 style='color:black; margin:0;'>SISTEM SURVEY LOT</h1>
-        <p style='color:black; font-size:1.1em;'>Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
-        <p style='color:#0083B0; font-weight:bold; font-size:1.2em;'>PENGENDALI: MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI</p>
-    """, unsafe_allow_html=True)
-with c2:
-    if os.path.exists("image_b5be5f.jpg"):
-        st.image("image_b5be5f.jpg", width=100)
-st.markdown('</div>', unsafe_allow_html=True)
+# 7. HEADER UTAMA (DITENGAHKAN & WARNA PUTIH)
+st.markdown(f"""
+    <div class="header-clean">
+        <h1>SISTEM SURVEY LOT</h1>
+        <p>Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
+        <p class="pengendali">PENGENDALI: MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI</p>
+    </div>
+""", unsafe_allow_html=True)
 
 # 8. LOGIK PEMETAAN
 if uploaded_file:
@@ -135,30 +158,15 @@ if uploaded_file:
         m3.metric("Perimeter (m)", f"{perimeter:.2f}")
         m4.metric("Stesen", len(df))
 
-        # --- KONFIGURASI ZOOM MAKSIMUM ---
+        # PETA
         t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
+        m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, tiles=t_url, attr='Google', max_zoom=22)
         
-        m = folium.Map(
-            location=[df['lat'].mean(), df['lon'].mean()], 
-            zoom_start=19, 
-            tiles=t_url, 
-            attr='Google',
-            max_zoom=22  # Membenarkan zoom sehingga tahap 22
-        )
-        # ---------------------------------
-        
-        folium.Polygon(
-            locations=list(zip(df['lat'], df['lon'])), 
-            color="yellow", 
-            fill=True, 
-            fill_opacity=0.3,
-            weight=3
-        ).add_to(m)
+        folium.Polygon(locations=list(zip(df['lat'], df['lon'])), color="yellow", fill=True, fill_opacity=0.3, weight=3).add_to(m)
         
         for i in range(len(df)):
             p1 = df.iloc[i]
             p2 = df.iloc[(i + 1) % len(df)]
-            
             dE, dN = p2['E'] - p1['E'], p2['N'] - p1['N']
             dist = np.sqrt(dE**2 + dN**2)
             brg = (np.degrees(np.arctan2(dE, dN)) + 360) % 360
@@ -171,18 +179,13 @@ if uploaded_file:
             if show_distance: label_text += f"D: {dist:.2f}m"
             
             if label_text:
-                folium.Marker(
-                    [mid_lat, mid_lon],
-                    icon=folium.DivIcon(html=f'<div style="font-size: 8pt; color: yellow; font-weight: bold; text-shadow: 1px 1px black; width: 150px;">{label_text}</div>')
-                ).add_to(m)
+                folium.Marker([mid_lat, mid_lon], icon=folium.DivIcon(html=f'<div style="font-size: 8pt; color: yellow; font-weight: bold; text-shadow: 1px 1px black; width: 150px;">{label_text}</div>')).add_to(m)
 
         if show_area_label:
-            folium.Marker(
-                [df['lat'].mean(), df['lon'].mean()],
-                icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: #00FF00; font-weight: bold; text-shadow: 2px 2px black; width: 200px; text-align: center;">LUAS: {area:.2f} m²</div>')
-            ).add_to(m)
+            folium.Marker([df['lat'].mean(), df['lon'].mean()], icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: #00FF00; font-weight: bold; text-shadow: 2px 2px black; width: 200px; text-align: center;">LUAS: {area:.2f} m²</div>')).add_to(m)
         
         folium_static(m, width=1000)
+        
         st.write("### 📊 Jadual Koordinat")
         st.dataframe(df[['STN', 'E', 'N']], use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)

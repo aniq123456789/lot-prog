@@ -125,10 +125,9 @@ if uploaded_file:
         
         st.markdown('<div class="data-card">', unsafe_allow_html=True)
         
-        # Pengiraan Luas & Perimeter
         poly = Polygon(list(zip(df['E'], df['N'])))
         area = poly.area
-        perimeter = poly.length # Perimeter lot
+        perimeter = poly.length
         
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Luas (m²)", f"{area:.2f}")
@@ -136,10 +135,18 @@ if uploaded_file:
         m3.metric("Perimeter (m)", f"{perimeter:.2f}")
         m4.metric("Stesen", len(df))
 
+        # --- KONFIGURASI ZOOM MAKSIMUM ---
         t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
-        m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, tiles=t_url, attr='Google')
         
-        # Plot Polygon
+        m = folium.Map(
+            location=[df['lat'].mean(), df['lon'].mean()], 
+            zoom_start=19, 
+            tiles=t_url, 
+            attr='Google',
+            max_zoom=22  # Membenarkan zoom sehingga tahap 22
+        )
+        # ---------------------------------
+        
         folium.Polygon(
             locations=list(zip(df['lat'], df['lon'])), 
             color="yellow", 
@@ -148,20 +155,16 @@ if uploaded_file:
             weight=3
         ).add_to(m)
         
-        # Logik Marker & Label (Bearing/Jarak)
         for i in range(len(df)):
             p1 = df.iloc[i]
-            p2 = df.iloc[(i + 1) % len(df)] # Titik seterusnya
+            p2 = df.iloc[(i + 1) % len(df)]
             
-            # Kira Bearing & Jarak
             dE, dN = p2['E'] - p1['E'], p2['N'] - p1['N']
             dist = np.sqrt(dE**2 + dN**2)
             brg = (np.degrees(np.arctan2(dE, dN)) + 360) % 360
             
-            # Letak Marker Stesen
             folium.CircleMarker([p1['lat'], p1['lon']], radius=4, color='red', fill=True).add_to(m)
             
-            # Tambah Label di tengah garisan
             mid_lat, mid_lon = (p1['lat'] + p2['lat'])/2, (p1['lon'] + p2['lon'])/2
             label_text = ""
             if show_bearing: label_text += f"B: {format_dms(brg)}<br>"
@@ -173,7 +176,6 @@ if uploaded_file:
                     icon=folium.DivIcon(html=f'<div style="font-size: 8pt; color: yellow; font-weight: bold; text-shadow: 1px 1px black; width: 150px;">{label_text}</div>')
                 ).add_to(m)
 
-        # Label Luas di tengah Polygon
         if show_area_label:
             folium.Marker(
                 [df['lat'].mean(), df['lon'].mean()],

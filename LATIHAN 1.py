@@ -9,12 +9,10 @@ from streamlit_folium import folium_static
 from pyproj import Transformer
 from shapely.geometry import Polygon, mapping
 
-# ==========================================
-# 1. KONFIGURASI HALAMAN (Mesti Paling Atas)
-# ==========================================
+# 1. Konfigurasi Halaman (Mesti paling atas)
 st.set_page_config(page_title="Sistem Survey Lot PUO", layout="wide")
 
-# 2. FUNGSI BACKGROUND
+# 2. Fungsi Background
 def get_base64(bin_file):
     if os.path.exists(bin_file):
         with open(bin_file, 'rb') as f:
@@ -24,7 +22,7 @@ def get_base64(bin_file):
 
 bg_img = get_base64("RUANG.jfif")
 
-# 3. CSS CUSTOM
+# 3. CSS Style
 st.markdown(f"""
     <style>
         .stApp {{
@@ -61,16 +59,14 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 4. FUNGSI FORMAT DMS
+# 4. Fungsi Format DMS
 def format_dms(dd):
     d = int(dd)
     m = int((dd - d) * 60)
     s = round((((dd - d) * 60) - m) * 60, 0)
     return f"{d}°{abs(m):02d}'{abs(int(s)):02d}\""
 
-# ==========================================
-# 5. SISTEM LOG MASUK (DIPERBAIKI)
-# ==========================================
+# 5. Auth Session
 if "auth" not in st.session_state:
     st.session_state.auth = False
     st.session_state.user_id = ""
@@ -79,9 +75,8 @@ if not st.session_state.auth:
     _, col, _ = st.columns([1, 1, 1])
     with col:
         st.markdown("<div class='data-card' style='text-align:center;'><h3>🔐 Log Masuk</h3>", unsafe_allow_html=True)
-        id_user = st.text_input("ID (1, 2, atau 3):")
+        id_user = st.text_input("ID:")
         pw_user = st.text_input("Password:", type="password")
-        
         allowed_users = ["1", "2", "3"]
         if st.button("Masuk", use_container_width=True):
             if id_user in allowed_users and pw_user == "admin123":
@@ -93,9 +88,7 @@ if not st.session_state.auth:
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# ==========================================
-# 6. SIDEBAR & MENU
-# ==========================================
+# 6. SIDEBAR
 with st.sidebar:
     if os.path.exists("image_b5be5f.jpg"):
         st.image("image_b5be5f.jpg")
@@ -110,13 +103,9 @@ with st.sidebar:
     show_area_label = st.checkbox("Papar Label Luas", value=True)
     
     st.divider()
-    if st.button("Log Keluar"):
-        st.session_state.auth = False
-        st.rerun()
+    uploaded_file = st.file_uploader("Muat naik fail CSV", type=["csv"])
 
-# ==========================================
 # 7. HEADER UTAMA
-# ==========================================
 st.markdown(f"""
     <div class="header-clean">
         <h1>SISTEM SURVEY LOT</h1>
@@ -125,20 +114,17 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# 8. MUAT NAIK & PEMPROSESAN DATA
-# ==========================================
-uploaded_file = st.sidebar.file_uploader("Muat naik fail CSV", type=["csv"])
-
+# 8. LOGIK UTAMA
 if uploaded_file:
     try:
+        # Baca Data
         df = pd.read_csv(uploaded_file)
         
-        # Transformasi Koordinat (Contoh: Cassini ke WGS84)
+        # Transformasi Koordinat (Cassini EPSG:4390 ke WGS84 EPSG:4326)
         tf = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
         df['lon'], df['lat'] = tf.transform(df['E'].values, df['N'].values)
         
-        # Pengiraan Luas & Perimeter mengikut Koordinat E, N (Meter)
+        # Kira Luas & Perimeter
         poly_points = list(zip(df['E'], df['N']))
         poly = Polygon(poly_points)
         area = poly.area
@@ -146,27 +132,24 @@ if uploaded_file:
         
         st.markdown('<div class="data-card">', unsafe_allow_html=True)
         
-        # Metrik
+        # Metrik Atas
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Luas (m²)", f"{area:.2f}")
         m2.metric("Ekar", f"{area/4046.856:.4f}")
         m3.metric("Perimeter (m)", f"{perimeter:.2f}")
         m4.metric("Stesen", len(df))
 
-        # Paparan Peta
+        # Peta Folium
         t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
         m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, tiles=t_url, attr='Google')
         
-        # Lukis Poligon pada Peta
+        # Lukis Lot
         folium.Polygon(
             locations=list(zip(df['lat'], df['lon'])),
-            color="yellow",
-            fill=True,
-            fill_opacity=0.3,
-            weight=3
+            color="yellow", fill=True, fill_opacity=0.3, weight=3
         ).add_to(m)
 
-        # Label Bearing & Jarak
+        # Tambah Marker & Label
         for i in range(len(df)):
             p1 = df.iloc[i]
             p2 = df.iloc[(i + 1) % len(df)]
@@ -177,33 +160,47 @@ if uploaded_file:
             
             if show_bearing or show_distance:
                 mid_lat, mid_lon = (p1['lat']+p2['lat'])/2, (p1['lon']+p2['lon'])/2
-                label = ""
-                if show_bearing: label += f"B: {format_dms(brg)}<br>"
-                if show_distance: label += f"D: {dist:.2f}m"
+                label = f"{format_dms(brg) if show_bearing else ''}<br>{f'{dist:.2f}m' if show_distance else ''}"
                 folium.Marker([mid_lat, mid_lon], icon=folium.DivIcon(html=f'<div style="font-size:8pt; color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">{label}</div>')).add_to(m)
 
         folium_static(m, width=1100)
 
-        # ==========================================
-        # 9. EKSPORT KE QGIS (GEOJSON)
-        # ==========================================
+        # 9. EKSPORT GEOJSON (Bahagian ini punca error tadi jika tak kena gaya)
         st.divider()
-        st.write("### 📊 Data & Export")
+        st.write("### 📊 Jadual & Export")
         c1, c2 = st.columns([3, 1])
         
         with c1:
             st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']], use_container_width=True)
             
         with c2:
-            # Sediakan Data GeoJSON
-            features = [{
-                "type": "Feature",
-                "properties": {
-                    "Pengendali": st.session_state.user_id,
-                    "Luas_m2": round(area, 2),
-                    "Perimeter_m": round(perimeter, 2)
-                },
-                "geometry": mapping(Polygon(list(zip(df['lon'], df['lat']))))
-            }]
+            # Sediakan fail GeoJSON
+            geojson_data = {
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "properties": {
+                        "Pengendali": st.session_state.user_id,
+                        "Luas_m2": round(area, 2),
+                        "Perimeter_m": round(perimeter, 2)
+                    },
+                    "geometry": mapping(Polygon(list(zip(df['lon'], df['lat']))))
+                }]
+            }
+            geojson_str = json.dumps(geojson_data)
             
-            geojson_output
+            st.download_button(
+                label="📥 Download GeoJSON (QGIS)",
+                data=geojson_str,
+                file_name=f"Survey_Lot_{st.session_state.user_id}.geojson",
+                mime="application/json",
+                use_container_width=True
+            )
+            
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    except Exception as e:
+        st.error(f"Ralat: {e}")
+
+else:
+    st.markdown("<div class='data-card' style='text-align:center;'>👋 Sila muat naik fail CSV di sidebar untuk memulakan survey.</div>", unsafe_allow_html=True)

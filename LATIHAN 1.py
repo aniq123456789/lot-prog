@@ -28,7 +28,6 @@ def reset_password_dialog():
     pass_sah = st.text_input("Sahkan Kata Laluan Baharu:", type="password")
     
     if st.button("Simpan Kata Laluan", use_container_width=True):
-        # Kemaskini ID sah di sini kepada "1"
         if id_sah == "1" and pass_baru == pass_sah and pass_baru != "":
             st.success("✅ Kata laluan berjaya dikemaskini!")
             st.rerun()
@@ -45,7 +44,6 @@ def check_password():
             st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("Log Masuk", use_container_width=True):
-                # PERUBAHAN DI SINI: Username ditukar ke "1"
                 if user_id == "1" and password == "admin123":
                     st.session_state["password_correct"] = True
                     st.rerun()
@@ -60,37 +58,52 @@ def check_password():
 # ================== MAIN APP (SELEPAS LOGIN) ==================
 if check_password():
     
-    # --- 👤 PROFIL PENGGUNA (SIDEBAR PALING ATAS) ---
+    # --- 👤 PROFIL PENGGUNA (SIDEBAR) ---
     st.sidebar.markdown(
         """
         <div style="background: linear-gradient(135deg, #00B4DB, #0083B0); padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 20px;">
-            <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" width="80" style="border-radius: 50%; border: 3px solid white;">
-            <h3 style="color: white; margin-top: 10px; font-family: sans-serif;">Hai, Surveyor!</h3>
-            <p style="color: #e0e0e0; font-size: 0.8em; margin-bottom: 0px;">ID Pengguna: 1</p>
+            <h3 style="color: white; margin-top: 10px; font-family: sans-serif; font-size: 1.1em;">MUHAMMAD ANIQ IRFAN</h3>
+            <p style="color: #e0e0e0; font-size: 0.8em; margin-bottom: 0px;">Surveyor Berdaftar (ID: 1)</p>
         </div>
         """, unsafe_allow_html=True
     )
+    
+    # Menambah Gambar Profil di Sidebar
+    # Nota: Gantikan 'profile.jpg' dengan nama fail gambar anda
+    if os.path.exists("profile.jpg"):
+        st.sidebar.image("profile.jpg", caption="MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI", use_container_width=True)
+    else:
+        st.sidebar.warning("📸 Letakkan fail 'profile.jpg' untuk melihat gambar anda di sini.")
 
     # --- BAHAGIAN HEADER UTAMA ---
-    col_logo, col_text = st.columns([1.2, 4])
+    # Menambah kolum ketiga untuk gambar pengenalan
+    col_logo, col_text, col_profile_img = st.columns([1, 3, 1])
+    
     with col_logo:
         if os.path.exists("Poli_Logo.png"):
-            st.image("Poli_Logo.png", width=180)
+            st.image("Poli_Logo.png", width=150)
         else:
             st.info("🏢 PUO SURVEYOR")
 
     with col_text:
-        st.markdown("""
+        st.markdown(f"""
             <style>
-                .main-title { font-family: 'Arial Black', Gadget, sans-serif; font-size: 45px; font-weight: 900; margin-bottom: -10px; line-height: 1; letter-spacing: -1px; }
-                .sub-title { font-size: 18px; color: #555; margin-top: 5px; }
+                .main-title {{ font-family: 'Arial Black', Gadget, sans-serif; font-size: 40px; font-weight: 900; margin-bottom: -10px; line-height: 1; }}
+                .sub-title {{ font-size: 16px; color: #555; margin-top: 5px; }}
+                .name-highlight {{ color: #0083B0; font-weight: bold; font-size: 18px; }}
             </style>
             <div>
                 <h1 class="main-title">SISTEM SURVEY LOT</h1>
                 <p class="sub-title">Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
+                <p class="name-highlight">👤 { "MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI" }</p>
             </div>
         """, unsafe_allow_html=True)
-    
+
+    with col_profile_img:
+        # Gambar di bahagian pengenalan utama (Header)
+        if os.path.exists("profile.jpg"):
+            st.image("profile.jpg", width=120)
+
     st.markdown("<hr style='border: 1px solid #eee; margin-top: 0px;'>", unsafe_allow_html=True)
 
     # ================== SIDEBAR SETTINGS ==================
@@ -125,10 +138,9 @@ if check_password():
     if uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file)
-            
             if all(col in df.columns for col in ['STN', 'E', 'N']):
                 
-                # Transformer (Contoh: Cassini Perak/Malaysia ke WGS84)
+                # Transformer Cassini Perak/Malaysia (EPSG:4390) ke WGS84
                 transformer = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
                 df['lon'], df['lat'] = transformer.transform(df['E'].values, df['N'].values)
                 
@@ -179,21 +191,15 @@ if check_password():
                     m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, max_zoom=22, tiles=tile_layer, attr='Google')
                     
                     points_map = [[r['lat'], r['lon']] for _, r in df.iterrows()]
-                    
                     folium.Polygon(
-                        locations=points_map, 
-                        color=line_color, 
-                        weight=4, 
-                        fill=True, 
-                        fill_color=poly_color, 
-                        fill_opacity=poly_opacity
+                        locations=points_map, color=line_color, weight=4, 
+                        fill=True, fill_color=poly_color, fill_opacity=poly_opacity
                     ).add_to(m)
                     
                     for i in range(len(df)):
                         p1, p2 = df.iloc[i], df.iloc[(i + 1) % len(df)]
                         dE, dN = p2['E'] - p1['E'], p2['N'] - p1['N']
                         dist, bear = np.sqrt(dE**2 + dN**2), (np.degrees(np.arctan2(dE, dN)) + 360) % 360
-                        
                         angle = -np.degrees(np.arctan2(p2['lat'] - p1['lat'], p2['lon'] - p1['lon']))
                         if angle > 90: angle -= 180
                         elif angle < -90: angle += 180

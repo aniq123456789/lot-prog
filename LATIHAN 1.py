@@ -1,226 +1,182 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
-from shapely.geometry import Polygon, Point, LineString, mapping
-import json
+import folium
 import os
-import folium 
-from streamlit_folium import folium_static 
+import base64
+from streamlit_folium import folium_static
 from pyproj import Transformer
+from shapely.geometry import Polygon
 
-# Set layout halaman
+# 1. Konfigurasi Halaman
 st.set_page_config(page_title="Sistem Survey Lot PUO", layout="wide")
 
-# ================== CSS UNTUK FRAME & GAYA (STYLING) ==================
-st.markdown("""
+# Fungsi untuk menukar gambar lokal kepada format yang boleh dibaca CSS
+def get_base64(bin_file):
+    if os.path.exists(bin_file):
+        with open(bin_file, 'rb') as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    return None
+
+# 2. Pengurusan Gambar Latar Belakang (RUANG.jfif)
+bg_img = get_base64("RUANG.jfif")
+bg_style = ""
+if bg_img:
+    bg_style = f"""
     <style>
-        [data-testid="stSidebar"] {
-            background-color: #f8f9fa;
-            border-right: 5px solid #0083B0;
+    .stApp {{
+        background: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url("data:image/jfif;base64,{bg_img}");
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+    }}
+    </style>
+    """
+else:
+    # Backup jika fail RUANG.jfif tiada
+    bg_style = """
+    <style>
+    .stApp { background-color: #0e1117; }
+    </style>
+    """
+
+# 3. CSS Tambahan untuk Kacakkan Interface
+st.markdown(bg_style + """
+    <style>
+        /* Card Utama */
+        .main-card {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 25px;
+            border-radius: 15px;
+            border: 2px solid #0083B0;
+            color: black !important;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
         }
         
-        [data-testid="stSidebar"] .stText, 
-        [data-testid="stSidebar"] label, 
-        [data-testid="stSidebar"] h1, 
-        [data-testid="stSidebar"] h2, 
-        [data-testid="stSidebar"] h3, 
-        [data-testid="stSidebar"] h4, 
-        [data-testid="stSidebar"] h5, 
-        [data-testid="stSidebar"] h6,
-        [data-testid="stSidebar"] p,
-        [data-testid="stSidebar"] .stMarkdown {
-            color: #000000 !important;
+        /* Sidebar */
+        [data-testid="stSidebar"] {
+            background-color: rgba(248, 249, 250, 0.95);
+            border-right: 5px solid #0083B0;
         }
 
-        .header-container {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            border: 2px solid #0083B0;
-            margin-bottom: 20px;
-        }
-
-        .sidebar-name-card {
-            background: linear-gradient(135deg, #00B4DB, #0083B0);
-            padding: 15px;
-            border-radius: 12px;
-            text-align: center;
-            border: 3px solid #ffffff;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            margin-top: -10px;
-        }
-        .sidebar-name-card h4, .sidebar-name-card p {
-            color: white !important;
-        }
-
+        /* Profile Image Frame */
         .profile-frame {
-            border: 4px solid #0083B0;
+            border: 3px solid #0083B0;
             border-radius: 10px;
-            padding: 5px;
+            padding: 2px;
             background: white;
             display: inline-block;
         }
 
-        /* Gaya untuk video/gif supaya melengkung sikit */
-        .video-style {
-            border-radius: 10px;
-            overflow: hidden;
-            border: 2px solid #0083B0;
+        /* Metric Styling */
+        [data-testid="stMetricValue"] {
+            color: #1b5e20 !important;
+            font-weight: bold;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# ================== FUNGSI TUKAR DMS ==================
-def format_dms(decimal_degree):
-    d = int(decimal_degree)
-    m = int((decimal_degree - d) * 60)
-    s = round((((decimal_degree - d) * 60) - m) * 60, 0)
+# 4. Fungsi Utiliti
+def format_dms(dd):
+    d = int(dd)
+    m = int((dd - d) * 60)
+    s = round((((dd - d) * 60) - m) * 60, 0)
     return f"{d}°{abs(m):02d}'{abs(int(s)):02d}\""
 
-# ================== FUNGSI LOGIN ==================
 def check_password():
     if "password_correct" not in st.session_state:
         _, col_mid, _ = st.columns([1, 1.5, 1])
         with col_mid:
-            st.markdown("<h2 style='text-align: center;'>🔐 Sistem Survey Lot PUO</h2>", unsafe_allow_html=True)
-            user_id = st.text_input("👤 Masukkan ID:", key="user_id")
-            password = st.text_input("🔑 Masukkan Kata Laluan:", type="password", key="user_pass")
-            if st.button("Log Masuk", use_container_width=True):
+            st.markdown("<div class='main-card'><h2 style='text-align: center;'>🔐 Sistem Survey Lot PUO</h2>", unsafe_allow_html=True)
+            user_id = st.text_input("👤 Masukkan ID:")
+            password = st.text_input("🔑 Kata Laluan:", type="password")
+            if st.button("Masuk"):
                 if user_id == "1" and password == "admin123":
                     st.session_state["password_correct"] = True
                     st.rerun()
                 else:
-                    st.error("😕 ID atau Kata Laluan salah.")
+                    st.error("ID atau Kata Laluan salah!")
+            st.markdown("</div>", unsafe_allow_html=True)
         return False
     return True
 
-# ================== MAIN APP ==================
+# 5. Aplikasi Utama
 if check_password():
-    
+    # SIDEBAR
     with st.sidebar:
-        if os.path.exists("image_b5be5f.jpg"):
-            st.image("image_b5be5f.jpg", use_container_width=True)
+        # Papar gambar profil image_b5be5f.jpg
+        profile_path = "image_b5be5f.jpg"
+        if os.path.exists(profile_path):
+            st.image(profile_path, use_container_width=True)
         
-        st.markdown("""<div class="sidebar-name-card">
-            <h4>MUHAMMAD ANIQ IRFAN</h4>
-            <p>SURVEYOR BERDAFTAR (ID: 1)</p>
-        </div><br>""", unsafe_allow_html=True)
-
+        st.markdown(f"""
+            <div style="background:#0083B0; color:white; padding:15px; border-radius:12px; text-align:center;">
+                <h4 style="margin:0;">MUHAMMAD ANIQ IRFAN</h4>
+                <p style="margin:0; font-size:0.8em;">SURVEYOR BERDAFTAR (ID: 1)</p>
+            </div><br>
+        """, unsafe_allow_html=True)
+        
         st.header("⚙️ Tetapan Peta")
         map_type = st.radio("Pilih Mod Peta:", ["Google Satellite", "Google Street View"])
-        
-        st.markdown("---")
-        st.subheader("👁️ Paparan Data")
-        show_bearing = st.checkbox("Papar Bearing", value=True)
-        show_distance = st.checkbox("Papar Jarak", value=True)
-        show_area_label = st.checkbox("Papar Label Luas", value=True)
-        
-        st.markdown("---")
-        st.subheader("🎨 Estetika")
-        poly_color = st.sidebar.color_picker("Warna Kawasan", "#6036AF")
-        poly_opacity = st.sidebar.slider("Kelegapan", 0.0, 1.0, 0.4)
-        
         uploaded_file = st.sidebar.file_uploader("Muat Naik CSV", type=["csv"])
 
-    # --- HEADER YANG DIKEMASKINI ---
-    st.markdown('<div class="header-container">', unsafe_allow_html=True)
-    # Membahagi kepada 3 kolum: Teks Tajuk, Video Geografi, dan Profil
-    col_text, col_gif, col_profile_img = st.columns([2.5, 1.5, 0.8])
-    
-    with col_text:
+    # HEADER UTAMA
+    st.markdown('<div class="main-card">', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([3, 1.5, 1])
+    with c1:
         st.markdown("""
-            <h1 style="margin:0; color: black; font-size: 2.2em;">SISTEM SURVEY LOT</h1>
-            <p style="color: #555; font-size: 1.1em;">Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
-            <div style="background:#e3f2fd; padding:10px; border-left:6px solid #0083B0; border-radius:8px; margin-top:10px;">
-                <b style="color: black;">PENGENDALI:</b> <span style="color: #0083B0; font-weight: bold;">MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI</span>
+            <h1 style="margin:0; color: black;">SISTEM SURVEY LOT</h1>
+            <p style="color: #444;">Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
+            <div style="background:#e3f2fd; padding:10px; border-left:6px solid #0083B0; border-radius:8px;">
+                <b>PENGENDALI:</b> <span style="color: #0083B0;">MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI</span>
             </div>
         """, unsafe_allow_html=True)
-
-    with col_gif:
-        # Menggunakan GIF bertema Geografi/Survey dari URL luar
-        # Anda boleh tukar URL ini kepada fail lokal jika anda mempunyai fail .mp4 atau .gif sendiri
-        st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJueXF4ZzRyeXF4ZzRyeXF4ZzRyeXF4ZzRyeXF4ZzRyeXF4ZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKMGpxxcaBQIYJa/giphy.gif", 
-                 caption="Visualisasi Geografi", use_container_width=True)
-
-    with col_profile_img:
-        if os.path.exists("image_b5be5f.jpg"):
-            st.markdown('<div style="text-align: right;">', unsafe_allow_html=True)
+    with c2:
+        # Visualisasi Geografi
+        st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJueXF4ZzRyeXF4ZzRyeXF4ZzRyeXF4ZzRyeXF4ZzRyeXF4ZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKMGpxxcaBQIYJa/giphy.gif", caption="Visualisasi Data", use_container_width=True)
+    with c3:
+        if os.path.exists(profile_path):
             st.markdown('<div class="profile-frame">', unsafe_allow_html=True)
-            st.image("image_b5be5f.jpg", width=100)
-            st.markdown('</div></div>', unsafe_allow_html=True)
+            st.image(profile_path, width=110)
+            st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- LOGIK PEMETAAN (Tiada Perubahan) ---
+    # PEMPROSESAN DATA
     if uploaded_file:
         try:
             df = pd.read_csv(uploaded_file)
             if all(col in df.columns for col in ['STN', 'E', 'N']):
-                transformer = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
-                df['lon'], df['lat'] = transformer.transform(df['E'].values, df['N'].values)
+                tf = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
+                df['lon'], df['lat'] = tf.transform(df['E'].values, df['N'].values)
                 
-                coords = list(zip(df['lat'], df['lon']))
+                # Metrik
                 poly_geom = Polygon(list(zip(df['E'], df['N'])))
                 area = poly_geom.area
-
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Luas (m²)", f"{area:.2f}")
-                c2.metric("Luas (Ekar)", f"{area/4046.856:.4f}")
-                c3.metric("Bil. Stesen", len(df))
-
-                tiles = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Google Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
                 
-                m = folium.Map(
-                    location=[df['lat'].mean(), df['lon'].mean()], 
-                    zoom_start=19, 
-                    max_zoom=22, 
-                    tiles=tiles, 
-                    attr='Google',
-                    control_scale=True
-                )
-
-                folium.Polygon(
-                    locations=coords,
-                    color="yellow",
-                    fill=True,
-                    fill_color=poly_color,
-                    fill_opacity=poly_opacity,
-                    weight=3
-                ).add_to(m)
-
-                for i in range(len(df)):
-                    p1 = df.iloc[i]
-                    p2 = df.iloc[(i + 1) % len(df)]
-                    dE, dN = p2['E'] - p1['E'], p2['N'] - p1['N']
-                    dist = np.sqrt(dE**2 + dN**2)
-                    bearing = (np.degrees(np.arctan2(dE, dN)) + 360) % 360
-                    
-                    folium.CircleMarker(
-                        [p1['lat'], p1['lon']], radius=5, color='red', fill=True,
-                        tooltip=f"Stesen: {int(p1['STN'])}<br>E: {p1['E']:.2f}<br>N: {p1['N']:.2f}"
-                    ).add_to(m)
-
-                    mid_lat, mid_lon = (p1['lat'] + p2['lat'])/2, (p1['lon'] + p2['lon'])/2
-                    label_html = ""
-                    if show_bearing: label_html += f"<b>{format_dms(bearing)}</b><br>"
-                    if show_distance: label_html += f"<span style='color:yellow;'>{dist:.2f}m</span>"
-                    
-                    if label_html:
-                        folium.Marker(
-                            [mid_lat, mid_lon],
-                            icon=folium.DivIcon(html=f'<div style="font-size: 8pt; color: white; text-shadow: 1px 1px black; width:100px;">{label_html}</div>')
-                        ).add_to(m)
-
-                if show_area_label:
-                    folium.Marker(
-                        [df['lat'].mean(), df['lon'].mean()],
-                        icon=folium.DivIcon(html=f'<div style="font-size: 14pt; color: #00FF00; font-weight: bold; text-shadow: 2px 2px black; width:200px; text-align:center;">LUAS: {area:.2f} m²</div>')
-                    ).add_to(m)
-
-                folium_static(m, width=1100, height=600)
+                st.markdown('<div class="main-card">', unsafe_allow_html=True)
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Luas (m²)", f"{area:.2f}")
+                m2.metric("Luas (Ekar)", f"{area/4046.856:.4f}")
+                m3.metric("Bil. Stesen", len(df))
+                
+                # Folium Map
+                tiles = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Google Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
+                m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, tiles=tiles, attr='Google')
+                
+                folium.Polygon(locations=list(zip(df['lat'], df['lon'])), color="yellow", weight=3, fill=True, fill_opacity=0.4).add_to(m)
+                
+                # Marker Stesen
+                for i, row in df.iterrows():
+                    folium.CircleMarker([row['lat'], row['lon']], radius=5, color='red', fill=True).add_to(m)
+                
+                folium_static(m, width=1050, height=550)
+                
+                st.write("### 📊 Jadual Data Koordinat")
                 st.dataframe(df[['STN', 'E', 'N']], use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
         except Exception as e:
-            st.error(f"Ralat: {e}")
+            st.error(f"Ralat teknikal: {e}")
     else:
-        st.info("👋 Sila muat naik fail CSV untuk melihat peta.")
+        st.markdown("<div class='main-card'>👋 Sila muat naik fail CSV untuk melihat pelan lot.</div>", unsafe_allow_html=True)

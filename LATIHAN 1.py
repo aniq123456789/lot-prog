@@ -95,7 +95,7 @@ def format_dms(dd):
     s = round((((dd - d) * 60) - m) * 60, 0)
     return f"{d}°{abs(m):02d}'{abs(int(s)):02d}\""
 
-# 5. Auth Session
+# 5. Auth Session (BAGIAN YANG DIKEMASKINI)
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
@@ -105,11 +105,16 @@ if not st.session_state.auth:
         st.markdown("<div class='data-card' style='text-align:center;'><h3>🔐 Log Masuk</h3>", unsafe_allow_html=True)
         id_user = st.text_input("ID:")
         pw_user = st.text_input("Password:", type="password")
+        
+        # Logik 3 Username, 1 Password
+        allowed_users = ["1", "2", "3"]
         if st.button("Masuk", use_container_width=True):
-            if id_user == "1" and pw_user == "admin123":
+            if id_user in allowed_users and pw_user == "admin123":
                 st.session_state.auth = True
+                st.session_state.user_id = id_user
                 st.rerun()
-            else: st.error("ID/Password Salah!")
+            else: 
+                st.error("ID atau Password Salah!")
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
@@ -118,6 +123,9 @@ with st.sidebar:
     if os.path.exists("image_b5be5f.jpg"):
         st.image("image_b5be5f.jpg")
     st.markdown("<h3 style='text-align:center; color:white !important; background:#0083B0; padding:10px; border-radius:10px;'>MUHAMMAD ANIQ IRFAN</h3>", unsafe_allow_html=True)
+    
+    st.write(f"**Log Masuk Sebagai:** User {st.session_state.user_id}")
+    st.divider()
     
     st.write("### ⚙️ Tetapan Peta")
     map_type = st.radio("Pilih Mod Peta:", ["Satellite", "Street View"])
@@ -130,7 +138,7 @@ with st.sidebar:
     st.write("### 📂 Muat Naik Data")
     uploaded_file = st.file_uploader("Pilih fail CSV anda", type=["csv"])
 
-# 7. HEADER UTAMA (DITENGAHKAN & WARNA PUTIH)
+# 7. HEADER UTAMA
 st.markdown(f"""
     <div class="header-clean">
         <h1>SISTEM SURVEY LOT</h1>
@@ -143,6 +151,7 @@ st.markdown(f"""
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
+        # Transformasi Koordinat (EPSG:4390 Cassini ke WGS84)
         tf = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
         df['lon'], df['lat'] = tf.transform(df['E'].values, df['N'].values)
         

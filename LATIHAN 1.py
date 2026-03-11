@@ -24,21 +24,16 @@ bg_img = get_base64("RUANG.jfif")
 # 3. CSS - FOKUS WARNA HITAM DI SIDEBAR
 st.markdown(f"""
     <style>
-        /* Background Utama */
         .stApp {{
             background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url("data:image/jfif;base64,{bg_img}");
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
         }}
-        
-        /* SIDEBAR: Paksa semua tulisan jadi HITAM */
         [data-testid="stSidebar"] {{
             background-color: rgba(248, 249, 250, 0.95);
             border-right: 5px solid #0083B0;
         }}
-        
-        /* Menyasarkan semua label, teks, dan radio button dalam sidebar */
         [data-testid="stSidebar"] .stText, 
         [data-testid="stSidebar"] label, 
         [data-testid="stSidebar"] p, 
@@ -49,8 +44,6 @@ st.markdown(f"""
             color: #000000 !important;
             font-weight: 600 !important;
         }}
-
-        /* Header & Data Card */
         .header-container {{
             background: rgba(255, 255, 255, 0.9);
             padding: 20px;
@@ -67,7 +60,14 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 4. Auth Session
+# 4. Fungsi Format DMS (Bearing)
+def format_dms(dd):
+    d = int(dd)
+    m = int((dd - d) * 60)
+    s = round((((dd - d) * 60) - m) * 60, 0)
+    return f"{d}°{abs(m):02d}'{abs(int(s)):02d}\""
+
+# 5. Auth Session
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
@@ -85,7 +85,7 @@ if not st.session_state.auth:
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# 5. SIDEBAR (Tulisan kini Hitam)
+# 6. SIDEBAR
 with st.sidebar:
     if os.path.exists("image_b5be5f.jpg"):
         st.image("image_b5be5f.jpg")
@@ -94,10 +94,15 @@ with st.sidebar:
     st.write("### ⚙️ Tetapan Peta")
     map_type = st.radio("Pilih Mod Peta:", ["Satellite", "Street View"])
     
+    st.write("### 👁️ Paparan Data")
+    show_bearing = st.checkbox("Papar Bearing", value=True)
+    show_distance = st.checkbox("Papar Jarak", value=True)
+    show_area_label = st.checkbox("Papar Label Luas", value=True)
+    
     st.write("### 📂 Muat Naik Data")
     uploaded_file = st.file_uploader("Pilih fail CSV anda", type=["csv"])
 
-# 6. HEADER UTAMA
+# 7. HEADER UTAMA
 st.markdown('<div class="header-container">', unsafe_allow_html=True)
 c1, c2 = st.columns([4, 1])
 with c1:
@@ -111,7 +116,7 @@ with c2:
         st.image("image_b5be5f.jpg", width=100)
 st.markdown('</div>', unsafe_allow_html=True)
 
-# 7. LOGIK PEMETAAN
+# 8. LOGIK PEMETAAN
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
@@ -119,20 +124,67 @@ if uploaded_file:
         df['lon'], df['lat'] = tf.transform(df['E'].values, df['N'].values)
         
         st.markdown('<div class="data-card">', unsafe_allow_html=True)
-        m1, m2, m3 = st.columns(3)
+        
+        # Pengiraan Luas & Perimeter
         poly = Polygon(list(zip(df['E'], df['N'])))
-        m1.metric("Luas (m²)", f"{poly.area:.2f}")
-        m2.metric("Ekar", f"{poly.area/4046.856:.4f}")
-        m3.metric("Stesen", len(df))
+        area = poly.area
+        perimeter = poly.length # Perimeter lot
+        
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Luas (m²)", f"{area:.2f}")
+        m2.metric("Ekar", f"{area/4046.856:.4f}")
+        m3.metric("Perimeter (m)", f"{perimeter:.2f}")
+        m4.metric("Stesen", len(df))
 
         t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
         m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, tiles=t_url, attr='Google')
-        folium.Polygon(locations=list(zip(df['lat'], df['lon'])), color="yellow", fill=True, weight=3).add_to(m)
+        
+        # Plot Polygon
+        folium.Polygon(
+            locations=list(zip(df['lat'], df['lon'])), 
+            color="yellow", 
+            fill=True, 
+            fill_opacity=0.3,
+            weight=3
+        ).add_to(m)
+        
+        # Logik Marker & Label (Bearing/Jarak)
+        for i in range(len(df)):
+            p1 = df.iloc[i]
+            p2 = df.iloc[(i + 1) % len(df)] # Titik seterusnya
+            
+            # Kira Bearing & Jarak
+            dE, dN = p2['E'] - p1['E'], p2['N'] - p1['N']
+            dist = np.sqrt(dE**2 + dN**2)
+            brg = (np.degrees(np.arctan2(dE, dN)) + 360) % 360
+            
+            # Letak Marker Stesen
+            folium.CircleMarker([p1['lat'], p1['lon']], radius=4, color='red', fill=True).add_to(m)
+            
+            # Tambah Label di tengah garisan
+            mid_lat, mid_lon = (p1['lat'] + p2['lat'])/2, (p1['lon'] + p2['lon'])/2
+            label_text = ""
+            if show_bearing: label_text += f"B: {format_dms(brg)}<br>"
+            if show_distance: label_text += f"D: {dist:.2f}m"
+            
+            if label_text:
+                folium.Marker(
+                    [mid_lat, mid_lon],
+                    icon=folium.DivIcon(html=f'<div style="font-size: 8pt; color: yellow; font-weight: bold; text-shadow: 1px 1px black; width: 150px;">{label_text}</div>')
+                ).add_to(m)
+
+        # Label Luas di tengah Polygon
+        if show_area_label:
+            folium.Marker(
+                [df['lat'].mean(), df['lon'].mean()],
+                icon=folium.DivIcon(html=f'<div style="font-size: 12pt; color: #00FF00; font-weight: bold; text-shadow: 2px 2px black; width: 200px; text-align: center;">LUAS: {area:.2f} m²</div>')
+            ).add_to(m)
         
         folium_static(m, width=1000)
         st.write("### 📊 Jadual Koordinat")
         st.dataframe(df[['STN', 'E', 'N']], use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
+        
     except Exception as e:
         st.error(f"Ralat: {e}")
 else:

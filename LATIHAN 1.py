@@ -9,7 +9,7 @@ from streamlit_folium import folium_static
 from pyproj import Transformer
 from shapely.geometry import Polygon, mapping
 
-# 1. Konfigurasi Halaman (Mesti paling atas)
+# 1. Konfigurasi Halaman
 st.set_page_config(page_title="Sistem Survey Lot PUO", layout="wide")
 
 # 2. Fungsi Background
@@ -22,7 +22,7 @@ def get_base64(bin_file):
 
 bg_img = get_base64("RUANG.jfif")
 
-# 3. CSS Style
+# 3. CSS Style (DIPERBAIKI UNTUK TULISAN GELAP)
 st.markdown(f"""
     <style>
         .stApp {{
@@ -44,6 +44,15 @@ st.markdown(f"""
             color: white !important;
             font-size: 3em !important;
             text-shadow: 2px 2px 10px rgba(0,0,0,0.8);
+        }}
+        /* Tulisan Pengendali di Header - Warna Biru Gelap/Hitam */
+        .pengendali-text {{
+            color: #004d66 !important; 
+            font-weight: 900 !important;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 5px 15px;
+            border-radius: 10px;
+            display: inline-block;
         }}
         .data-card {{
             background: rgba(255, 255, 255, 0.15);
@@ -88,11 +97,17 @@ if not st.session_state.auth:
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# 6. SIDEBAR
+# 6. SIDEBAR (TULISAN PENGENDALI DIGELAPKAN)
 with st.sidebar:
     if os.path.exists("image_b5be5f.jpg"):
         st.image("image_b5be5f.jpg")
-    st.markdown(f"<h3 style='text-align:center; color:white !important; background:#0083B0; padding:10px; border-radius:10px;'>PENGENDALI: {st.session_state.user_id}</h3>", unsafe_allow_html=True)
+    
+    # Tulisan ID Pengendali di Sidebar (Warna Hitam)
+    st.markdown(f"""
+        <div style='text-align:center; color:#000000; background:#e0e0e0; padding:10px; border-radius:10px; font-weight:bold; border: 2px solid #0083B0;'>
+            PENGENDALI ID: {st.session_state.user_id}
+        </div>
+    """, unsafe_allow_html=True)
     
     st.write("### ⚙️ Tetapan Peta")
     map_type = st.radio("Pilih Mod Peta:", ["Satellite", "Street View"])
@@ -105,26 +120,22 @@ with st.sidebar:
     st.divider()
     uploaded_file = st.file_uploader("Muat naik fail CSV", type=["csv"])
 
-# 7. HEADER UTAMA
+# 7. HEADER UTAMA (TULISAN PENGENDALI DIGELAPKAN)
 st.markdown(f"""
     <div class="header-clean">
         <h1>SISTEM SURVEY LOT</h1>
         <p>Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
-        <p style="color:#00d4ff !important; font-weight:bold;">PENGENDALI: MUHAMMAD ANIQ IRFAN</p>
+        <p class="pengendali-text">PENGENDALI: MUHAMMAD ANIQ IRFAN</p>
     </div>
 """, unsafe_allow_html=True)
 
 # 8. LOGIK UTAMA
 if uploaded_file:
     try:
-        # Baca Data
         df = pd.read_csv(uploaded_file)
-        
-        # Transformasi Koordinat (Cassini EPSG:4390 ke WGS84 EPSG:4326)
         tf = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
         df['lon'], df['lat'] = tf.transform(df['E'].values, df['N'].values)
         
-        # Kira Luas & Perimeter
         poly_points = list(zip(df['E'], df['N']))
         poly = Polygon(poly_points)
         area = poly.area
@@ -132,30 +143,25 @@ if uploaded_file:
         
         st.markdown('<div class="data-card">', unsafe_allow_html=True)
         
-        # Metrik Atas
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Luas (m²)", f"{area:.2f}")
         m2.metric("Ekar", f"{area/4046.856:.4f}")
         m3.metric("Perimeter (m)", f"{perimeter:.2f}")
         m4.metric("Stesen", len(df))
 
-        # Peta Folium
         t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
         m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, tiles=t_url, attr='Google')
         
-        # Lukis Lot
         folium.Polygon(
             locations=list(zip(df['lat'], df['lon'])),
             color="yellow", fill=True, fill_opacity=0.3, weight=3
         ).add_to(m)
 
-        # Tambah Marker & Label
         for i in range(len(df)):
             p1 = df.iloc[i]
             p2 = df.iloc[(i + 1) % len(df)]
             dist = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
             brg = (np.degrees(np.arctan2(p2['E']-p1['E'], p2['N']-p1['N'])) + 360) % 360
-            
             folium.CircleMarker([p1['lat'], p1['lon']], radius=5, color='red', fill=True).add_to(m)
             
             if show_bearing or show_distance:
@@ -165,7 +171,6 @@ if uploaded_file:
 
         folium_static(m, width=1100)
 
-        # 9. EKSPORT GEOJSON (Bahagian ini punca error tadi jika tak kena gaya)
         st.divider()
         st.write("### 📊 Jadual & Export")
         c1, c2 = st.columns([3, 1])
@@ -174,7 +179,6 @@ if uploaded_file:
             st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']], use_container_width=True)
             
         with c2:
-            # Sediakan fail GeoJSON
             geojson_data = {
                 "type": "FeatureCollection",
                 "features": [{

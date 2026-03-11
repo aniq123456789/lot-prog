@@ -1,144 +1,97 @@
-import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
+import math
 import numpy as np
-import json
-import folium
-from streamlit_folium import st_folium
-from pyproj import Transformer
+import ezdxf  # Library untuk eksport AutoCAD
 
-# --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="PUO Survey Lot Visualizer", layout="wide")
+# ==========================
+# DATA ASAL (DARI KOD ANDA)
+# ==========================
+LOT_NO = "11487"
+AREA_VAL = "247 m²"
+start_northing = 6736.912
+start_easting = 115597.566
 
-# --- FUNGSI PEMBANTU ---
-def to_dms(deg):
-    d = int(deg)
-    m = int((deg - d) * 60)
-    s = int((deg - d - m/60) * 3600)
-    return f"{d}°{m}'{s}\""
+data = [
+    (119 + 8/60, 13.648),
+    (197 + 30/60, 12.544),
+    (248 + 19/60, 5.777),
+    (299 + 8/60, 12.528),
+    (29 + 8/60, 16.764),
+]
 
-# Fungsi tukar koordinat ke Lat/Lon untuk Google Maps
-def transform_coords(df, epsg_code):
-    try:
-        # Tukar dari EPSG pilihan (cth: 3168 untuk RSO) ke WGS84 (Lat/Lon)
-        transformer = Transformer.from_crs(f"EPSG:{epsg_code}", "EPSG:4326", always_xy=True)
-        lon, lat = transformer.transform(df['E'].values, df['N'].values)
-        return lat, lon
-    except:
-        return None, None
+def bearing_to_xy(bearing_deg, distance):
+    rad = math.radians(bearing_deg)
+    return distance * math.sin(rad), distance * math.cos(rad)
 
-# --- PENGURUSAN SESSION STATE ---
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
+# Bina koordinat relatif
+points_rel = [(0, 0)]
+x, y = 0, 0
+for b, d in data:
+    dx, dy = bearing_to_xy(b, d)
+    x += dx
+    y += dy
+    points_rel.append((x, y))
 
-# --- HALAMAN LOG MASUK ---
-def login_page():
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        st.image("https://www.puo.edu.my/wp-content/uploads/2021/08/cropped-LOGO-PUO-1.png", width=150)
-        st.title("Sistem Lot Ukur PUO")
-        user_id = st.text_input("ID Pengguna")
-        password = st.text_input("Kata Laluan", type='password')
-        if st.button("Log Masuk", use_container_width=True):
-            if user_id == "1" and password == "admin123":
-                st.session_state.logged_in = True
-                st.rerun()
-            else:
-                st.error("ID atau Kata Laluan salah!")
+points_rel = np.array(points_rel)
 
-# --- HALAMAN UTAMA (APLIKASI) ---
-def main_app():
-    with st.sidebar:
-        st.markdown(f"""
-        <div style='background-color: #0099ff; padding: 20px; border-radius: 15px; text-align: center; color: white; margin-bottom: 20px;'>
-            <img src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png' width='80' style='filter: brightness(0) invert(1);'>
-            <h2 style='margin: 10px 0 0 0;'>Hai, FARZAT!</h2>
-            <p style='font-size: 14px; opacity: 0.8;'>MUHAMMAD FARZAT</p>
-        </div>
-        """, unsafe_allow_html=True)
+# Penyelarasan Datum
+offset_x = start_easting - points_rel[3][0]
+offset_y = start_northing - points_rel[3][1]
+points = points_rel + [offset_x, offset_y]
 
-        st.subheader("⚙️ Kawalan Paparan")
-        saiz_marker = st.slider("Saiz Marker Stesen", 5, 50, 22)
-        saiz_teks = st.slider("Saiz Bearing/Jarak", 5, 20, 12)
-        warna_poli = st.color_picker("Warna Poligon", "#FFFF00")
+# ==========================================
+# FUNGSI EKSPORT KE AUTOCAD (DXF)
+# ==========================================
+def export_to_autocad(filename, coords, lot_no, area, sides_data):
+    # 1. Cipta dokumen DXF baru (Versi R2010 untuk kompatibiliti tinggi)
+    doc = ezdxf.new('R2010', setup=True)
+    msp = doc.modelspace()
+
+    # 2. Cipta Layer (Warna 7 = Putih/Hitam, Warna 1 = Merah, Warna 3 = Hijau)
+    doc.layers.new('SEMPADAN', dxfattribs={'color': 7, 'lineweight': 35})
+    doc.layers.new('TEKS_LOT', dxfattribs={'color': 2})
+    doc.layers.new('TEKS_SISI', dxfattribs={'color': 3})
+
+    # 3. Lukis Sempadan Lot (LWPolyline)
+    # Ambil titik kecuali yang terakhir untuk elak pertindihan koordinat mula/tamat
+    boundary = coords[:-1]
+    msp.add_lwpolyline(boundary, close=True, dxfattribs={'layer': 'SEMPADAN'})
+
+    # 4. Tambah No Lot & Luas di tengah
+    cx, cy = boundary.mean(axis=0)
+    msp.add_text(f"LOT {lot_no}", 
+                 dxfattribs={'layer': 'TEKS_LOT', 'height': 0.8}
+                ).set_placement((cx, cy + 0.4), align=ezdxf.constants.MTEXT_CENTER)
+    
+    msp.add_text(area, 
+                 dxfattribs={'layer': 'TEKS_LOT', 'height': 0.6}
+                ).set_placement((cx, cy - 0.4), align=ezdxf.constants.MTEXT_CENTER)
+
+    # 5. Tambah Bearing & Jarak pada setiap sisi
+    for i in range(len(sides_data)):
+        p1, p2 = coords[i], coords[i+1]
+        mx, my = (p1[0] + p2[0])/2, (p1[1] + p2[1])/2
         
-        st.markdown("---")
-        if st.button("🚪 Log Keluar", use_container_width=True):
-            st.session_state.logged_in = False
-            st.rerun()
-
-    # --- HEADER ---
-    st.markdown("""
-        <div style='border-left: 5px solid #007bff; padding-left: 20px;'>
-            <h1 style='margin-bottom: 0px;'>SISTEM SURVEY LOT + GOOGLE SATELLITE</h1>
-            <p style='color: #6c757d;'>Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    col_epsg, col_upload = st.columns(2)
-    with col_epsg:
-        kod_epsg = st.text_input("🟢 Kod EPSG (Contoh: 3168 untuk RSO Semenanjung):", value="3168")
-    with col_upload:
-        uploaded_file = st.file_uploader("📁 Muat naik fail CSV (STN, E, N)", type="csv")
-
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
+        # Kira sudut untuk rotasi teks selari dengan garisan
+        dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+        angle = math.degrees(math.atan2(dy, dx))
         
-        if 'E' in df.columns and 'N' in df.columns:
-            # Pengiraan Luas
-            e, n = df['E'].values, df['N'].values
-            area = 0.5 * np.abs(np.dot(e, np.roll(n, 1)) - np.dot(n, np.roll(e, 1)))
-            
-            # --- TAB PAPARAN ---
-            tab_map, tab_plot = st.tabs(["🌍 Peta Satelit (Google)", "📊 Lukisan Teknikal (Matplotlib)"])
+        # Normalisasi sudut supaya teks tidak terbalik
+        if angle > 90: angle -= 180
+        elif angle < -90: angle += 180
 
-            with tab_map:
-                st.subheader("Paparan Google Satellite")
-                lats, lons = transform_coords(df, kod_epsg)
-                
-                if lats is not None:
-                    # Setup Folium Map
-                    m = folium.Map(location=[np.mean(lats), np.mean(lons)], zoom_start=18)
-                    
-                    # Tambah Google Satellite Layer
-                    google_sat = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
-                    folium.TileLayer(tiles=google_sat, attr='Google', name='Google Satellite', overlay=False, control=True).add_to(m)
-                    
-                    # Lukis Poligon
-                    points = list(zip(lats, lons))
-                    points.append(points[0]) # Tutup poligon
-                    folium.Polygon(locations=points, color="white", weight=2, fill=True, fill_color=warna_poli, fill_opacity=0.4).add_to(m)
-                    
-                    # Tambah Marker Stesen
-                    for i, row in df.iterrows():
-                        folium.CircleMarker(location=[lats[i], lons[i]], radius=5, color="red", fill=True).add_to(m)
-                        folium.Marker([lats[i], lons[i]], icon=folium.DivIcon(html=f'<div style="font-size: 10pt; color: white; font-weight: bold;">{row["STN"] if "STN" in df.columns else i+1}</div>')).add_to(m)
+        b_val, d_val = sides_data[i]
+        deg = int(b_val)
+        minute = int((b_val - deg) * 60)
+        label = f"{deg}%%d{minute:02d}'00\"   {d_val:.3f}m" # %%d adalah simbol darjah dalam AutoCAD
 
-                    st_folium(m, width=1000, height=500)
-                else:
-                    st.warning("Gagal menukar koordinat. Sila pastikan Kod EPSG betul.")
+        # Tambah teks dengan offset sedikit dari garisan
+        msp.add_text(label, 
+                     dxfattribs={'layer': 'TEKS_SISI', 'height': 0.4, 'rotation': angle}
+                    ).set_placement((mx, my + 0.2), align=ezdxf.constants.MTEXT_CENTER)
 
-            with tab_plot:
-                # (Kod Matplotlib asal anda dikekalkan di sini)
-                fig, ax = plt.subplots(figsize=(10, 8))
-                coords = list(zip(e, n))
-                coords.append(coords[0])
-                e_p, n_p = zip(*coords)
-                ax.plot(e_p, n_p, marker='o', color='black', markersize=saiz_marker/4)
-                ax.fill(e_p, n_p, color=warna_poli, alpha=0.5)
-                st.pyplot(fig)
+    # 6. Simpan fail
+    doc.saveas(filename)
+    print(f"Sukses! Fail '{filename}' telah dicipta.")
 
-            # Info Luas di bawah
-            st.markdown("---")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Luas (m²)", f"{area:.3f}")
-            c2.metric("Luas (Ekar)", f"{area * 0.000247105:.4f}")
-            
-            geojson_data = json.dumps({"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [list(zip(e, n))]}}]})
-            c3.download_button("📥 Download GeoJSON", data=geojson_data, file_name="survey_farzat.geojson", use_container_width=True)
-
-# JALANKAN APP
-if st.session_state.logged_in:
-    main_app()
-else:
-    login_page()
+# Jalankan fungsi eksport
+export_to_autocad(f"Lot_{LOT_NO}.dxf", points, LOT_NO, AREA_VAL, data)

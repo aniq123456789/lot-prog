@@ -62,6 +62,13 @@ st.markdown("""
             background: white;
             display: inline-block;
         }
+
+        /* Gaya untuk video/gif supaya melengkung sikit */
+        .video-style {
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid #0083B0;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -117,23 +124,35 @@ if check_password():
         
         uploaded_file = st.sidebar.file_uploader("Muat Naik CSV", type=["csv"])
 
+    # --- HEADER YANG DIKEMASKINI ---
     st.markdown('<div class="header-container">', unsafe_allow_html=True)
-    col_logo, col_text, col_profile_img = st.columns([1, 3.5, 0.8])
+    # Membahagi kepada 3 kolum: Teks Tajuk, Video Geografi, dan Profil
+    col_text, col_gif, col_profile_img = st.columns([2.5, 1.5, 0.8])
+    
     with col_text:
         st.markdown("""
-            <h1 style="margin:0; color: black;">SISTEM SURVEY LOT</h1>
-            <p style="color: #555;">Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
-            <div style="background:#e3f2fd; padding:10px; border-left:6px solid #0083B0; border-radius:8px;">
-                <b style="color: black;">PENGENDALI:</b> <span style="color: #0083B0;">MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI</span>
+            <h1 style="margin:0; color: black; font-size: 2.2em;">SISTEM SURVEY LOT</h1>
+            <p style="color: #555; font-size: 1.1em;">Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
+            <div style="background:#e3f2fd; padding:10px; border-left:6px solid #0083B0; border-radius:8px; margin-top:10px;">
+                <b style="color: black;">PENGENDALI:</b> <span style="color: #0083B0; font-weight: bold;">MUHAMMAD ANIQ IRFAN BIN MOHD ASMAZI</span>
             </div>
         """, unsafe_allow_html=True)
+
+    with col_gif:
+        # Menggunakan GIF bertema Geografi/Survey dari URL luar
+        # Anda boleh tukar URL ini kepada fail lokal jika anda mempunyai fail .mp4 atau .gif sendiri
+        st.image("https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJueXF4ZzRyeXF4ZzRyeXF4ZzRyeXF4ZzRyeXF4ZzRyeXF4ZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKMGpxxcaBQIYJa/giphy.gif", 
+                 caption="Visualisasi Geografi", use_container_width=True)
+
     with col_profile_img:
         if os.path.exists("image_b5be5f.jpg"):
+            st.markdown('<div style="text-align: right;">', unsafe_allow_html=True)
             st.markdown('<div class="profile-frame">', unsafe_allow_html=True)
-            st.image("image_b5be5f.jpg", width=90)
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.image("image_b5be5f.jpg", width=100)
+            st.markdown('</div></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # --- LOGIK PEMETAAN (Tiada Perubahan) ---
     if uploaded_file:
         try:
             df = pd.read_csv(uploaded_file)
@@ -150,10 +169,8 @@ if check_password():
                 c2.metric("Luas (Ekar)", f"{area/4046.856:.4f}")
                 c3.metric("Bil. Stesen", len(df))
 
-                # --- KONFIGURASI ZOOM MAKSIMUM ---
                 tiles = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Google Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
                 
-                # Menambah max_zoom=22 untuk membolehkan zoom paling dekat
                 m = folium.Map(
                     location=[df['lat'].mean(), df['lon'].mean()], 
                     zoom_start=19, 

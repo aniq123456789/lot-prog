@@ -22,7 +22,7 @@ def get_base64(bin_file):
 
 bg_img = get_base64("RUANG.jfif")
 
-# 3. CSS Style (DIPERBAIKI UNTUK SIDEBAR GELAP)
+# 3. CSS Style (MODIFIKASI SIDEBAR & TULISAN GELAP)
 st.markdown(f"""
     <style>
         .stApp {{
@@ -38,7 +38,6 @@ st.markdown(f"""
             border-right: 5px solid #0083B0;
         }}
         
-        /* Memaksa semua teks di sidebar menjadi HITAM PEKAT */
         [data-testid="stSidebar"] .stText, 
         [data-testid="stSidebar"] label, 
         [data-testid="stSidebar"] p, 
@@ -50,7 +49,6 @@ st.markdown(f"""
             font-weight: 700 !important;
         }}
 
-        /* Menggelapkan teks pada Radio Button & Checkbox */
         [data-testid="stSidebar"] .st-ae, [data-testid="stSidebar"] .st-af {{
             color: #000000 !important;
         }}
@@ -113,7 +111,6 @@ with st.sidebar:
     if os.path.exists("image_b5be5f.jpg"):
         st.image("image_b5be5f.jpg")
     
-    # Kotak Pengendali yang lebih gelap & jelas
     st.markdown(f"""
         <div style='text-align:center; color:#FFFFFF; background:#000000; padding:10px; border-radius:10px; font-weight:bold;'>
             PENGENDALI: {st.session_state.user_id}
@@ -183,6 +180,7 @@ if uploaded_file:
 
         folium_static(m, width=1100)
 
+        # 9. EKSPORT GEOJSON (BAHAGIAN DIKEMASKINI)
         st.divider()
         st.write("### 📊 Jadual & Export")
         c1, c2 = st.columns([3, 1])
@@ -191,19 +189,31 @@ if uploaded_file:
             st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']], use_container_width=True)
             
         with c2:
+            # Sediakan koordinat poligon yang ditutup (titik akhir = titik mula)
+            coords = list(zip(df['lon'], df['lat']))
+            if coords[0] != coords[-1]:
+                coords.append(coords[0])
+
             geojson_data = {
                 "type": "FeatureCollection",
+                "crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
                 "features": [{
                     "type": "Feature",
                     "properties": {
                         "Pengendali": st.session_state.user_id,
                         "Luas_m2": round(area, 2),
-                        "Perimeter_m": round(perimeter, 2)
+                        "Ekar": round(area/4046.856, 4),
+                        "Perimeter_m": round(perimeter, 2),
+                        "Tarikh": pd.Timestamp.now().strftime("%d/%m/%Y")
                     },
-                    "geometry": mapping(Polygon(list(zip(df['lon'], df['lat']))))
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [coords]
+                    }
                 }]
             }
-            geojson_str = json.dumps(geojson_data)
+            
+            geojson_str = json.dumps(geojson_data, indent=4)
             
             st.download_button(
                 label="📥 Download GeoJSON (QGIS)",
@@ -216,7 +226,7 @@ if uploaded_file:
         st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e:
-        st.error(f"Ralat: {e}")
+        st.error(f"Ralat pemprosesan data: {e}")
 
 else:
     st.markdown("<div class='data-card' style='text-align:center;'>👋 Sila muat naik fail CSV di sidebar untuk memulakan survey.</div>", unsafe_allow_html=True)

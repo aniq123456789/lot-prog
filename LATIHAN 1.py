@@ -1,97 +1,144 @@
-import math
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
 import numpy as np
-import ezdxf  # Library untuk eksport AutoCAD
+import json
+import folium
+from streamlit_folium import st_folium
 
-# ==========================
-# DATA ASAL (DARI KOD ANDA)
-# ==========================
-LOT_NO = "11487"
-AREA_VAL = "247 m²"
-start_northing = 6736.912
-start_easting = 115597.566
+# --- 1. FUNGSI LOGIN ---
+def login():
+    if 'logged_in' not in st.session_state:
+        st.session_state['logged_in'] = False
 
-data = [
-    (119 + 8/60, 13.648),
-    (197 + 30/60, 12.544),
-    (248 + 19/60, 5.777),
-    (299 + 8/60, 12.528),
-    (29 + 8/60, 16.764),
-]
+    if not st.session_state['logged_in']:
+        st.markdown("<h2 style='text-align: center;'>Log Masuk Sistem Ukur</h2>", unsafe_allow_html=True)
+        with st.form("login_form"):
+            user_id = st.text_input("ID Pengguna")
+            password = st.text_input("Kata Laluan", type="password")
+            submit = st.form_submit_button("Log Masuk")
 
-def bearing_to_xy(bearing_deg, distance):
-    rad = math.radians(bearing_deg)
-    return distance * math.sin(rad), distance * math.cos(rad)
+            if submit:
+                if user_id == "1" and password == "admin123":
+                    st.session_state['logged_in'] = True
+                    st.rerun()
+                else:
+                    st.error("ID atau Kata Laluan salah!")
+        return False
+    return True
 
-# Bina koordinat relatif
-points_rel = [(0, 0)]
-x, y = 0, 0
-for b, d in data:
-    dx, dy = bearing_to_xy(b, d)
-    x += dx
-    y += dy
-    points_rel.append((x, y))
+# Fungsi Penukaran DMS
+def to_dms(deg):
+    d = int(deg)
+    m = int((deg - d) * 60)
+    s = int((deg - d - m/60) * 3600)
+    return f"{d}°{m}'{s}\""
 
-points_rel = np.array(points_rel)
+# --- 2. ATURCARA UTAMA (SELEPAS LOGIN) ---
+if login():
+    # Butang Log Keluar di Sidebar
+    if st.sidebar.button("Log Keluar"):
+        st.session_state['logged_in'] = False
+        st.rerun()
 
-# Penyelarasan Datum
-offset_x = start_easting - points_rel[3][0]
-offset_y = start_northing - points_rel[3][1]
-points = points_rel + [offset_x, offset_y]
+    st.title("Sistem Visualisasi Lot & Satelit Google")
 
-# ==========================================
-# FUNGSI EKSPORT KE AUTOCAD (DXF)
-# ==========================================
-def export_to_autocad(filename, coords, lot_no, area, sides_data):
-    # 1. Cipta dokumen DXF baru (Versi R2010 untuk kompatibiliti tinggi)
-    doc = ezdxf.new('R2010', setup=True)
-    msp = doc.modelspace()
+    # Bahagian Muat Naik Fail di Sidebar
+    st.sidebar.header("Muat Naik Data")
+    uploaded_file = st.sidebar.file_uploader("Pilih fail CSV anda", type="csv")
 
-    # 2. Cipta Layer (Warna 7 = Putih/Hitam, Warna 1 = Merah, Warna 3 = Hijau)
-    doc.layers.new('SEMPADAN', dxfattribs={'color': 7, 'lineweight': 35})
-    doc.layers.new('TEKS_LOT', dxfattribs={'color': 2})
-    doc.layers.new('TEKS_SISI', dxfattribs={'color': 3})
+    # Inisialisasi Lokasi Lalai (Kuala Lumpur) jika tiada data
+    default_lat, default_lon = 3.1390, 101.6869
+    zoom_level = 6  # Pandangan jauh Malaysia pada mulanya
 
-    # 3. Lukis Sempadan Lot (LWPolyline)
-    # Ambil titik kecuali yang terakhir untuk elak pertindihan koordinat mula/tamat
-    boundary = coords[:-1]
-    msp.add_lwpolyline(boundary, close=True, dxfattribs={'layer': 'SEMPADAN'})
+    df = None
+    area = 0
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        if 'E' in df.columns and 'N' in df.columns:
+            # Gunakan min purata koordinat sebagai pusat peta
+            default_lat = df['N'].mean()
+            default_lon = df['E'].mean()
+            zoom_level = 19 # Zoom sangat dekat apabila data masuk
+            
+            # Pengiraan Luas
+            e = df['E'].values
+            n = df['N'].values
+            area = 0.5 * np.abs(np.dot(e, np.roll(n, 1)) - np.dot(n, np.roll(e, 1)))
 
-    # 4. Tambah No Lot & Luas di tengah
-    cx, cy = boundary.mean(axis=0)
-    msp.add_text(f"LOT {lot_no}", 
-                 dxfattribs={'layer': 'TEKS_LOT', 'height': 0.8}
-                ).set_placement((cx, cy + 0.4), align=ezdxf.constants.MTEXT_CENTER)
+    # --- 3. PAPARAN PETA SATELIT (SENTIASA DIPAPARKAN) ---
+    st.write("### 🌍 Pandangan Satelit Google")
     
-    msp.add_text(area, 
-                 dxfattribs={'layer': 'TEKS_LOT', 'height': 0.6}
-                ).set_placement((cx, cy - 0.4), align=ezdxf.constants.MTEXT_CENTER)
+    # Bina Peta Folium
+    # max_zoom=22 membolehkan zoom paling dekat dengan permukaan bumi
+    m = folium.Map(location=[default_lat, default_lon], zoom_start=zoom_level, max_zoom=22)
 
-    # 5. Tambah Bearing & Jarak pada setiap sisi
-    for i in range(len(sides_data)):
-        p1, p2 = coords[i], coords[i+1]
-        mx, my = (p1[0] + p2[0])/2, (p1[1] + p2[1])/2
+    # Masukkan Layer Google Satellite melalui HTML Tile
+    folium.TileLayer(
+        tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        attr='Google Satellite',
+        name='Google Satellite',
+        overlay=False,
+        control=True,
+        max_zoom=22
+    ).add_to(m)
+
+    # Jika CSV berjaya dimuat naik, cantumkan poligon ke dalam peta satelit
+    if df is not None:
+        coords_poly = [[df['N'][i], df['E'][i]] for i in range(len(df))]
+        # Tambah Poligon Kuning
+        folium.Polygon(
+            locations=coords_poly,
+            color="yellow",
+            weight=3,
+            fill=True,
+            fill_color="yellow",
+            fill_opacity=0.3,
+            popup=f"Luas Lot: {area:.3f} m²"
+        ).add_to(m)
         
-        # Kira sudut untuk rotasi teks selari dengan garisan
-        dx, dy = p2[0] - p1[0], p2[1] - p1[1]
-        angle = math.degrees(math.atan2(dy, dx))
+        # Tambah Marker untuk setiap stesen
+        for i, row in df.iterrows():
+            folium.CircleMarker(
+                location=[row['N'], row['E']],
+                radius=3,
+                color="red",
+                fill=True,
+                popup=f"STN: {row.get('STN', i+1)}"
+            ).add_to(m)
+
+    # Paparkan Peta folium dalam Streamlit
+    st_folium(m, width=1000, height=600, returned_objects=[])
+
+    # --- 4. PAPARAN DATA TEKNIKAL (HANYA JIKA CSV DIBUKA) ---
+    if df is not None:
+        st.write("---")
+        col1, col2 = st.columns([1, 1])
         
-        # Normalisasi sudut supaya teks tidak terbalik
-        if angle > 90: angle -= 180
-        elif angle < -90: angle += 180
+        with col1:
+            st.write("### 📋 Pratinjau Data:")
+            st.dataframe(df)
+            st.metric("Jumlah Luas", f"{area:.3f} m²")
 
-        b_val, d_val = sides_data[i]
-        deg = int(b_val)
-        minute = int((b_val - deg) * 60)
-        label = f"{deg}%%d{minute:02d}'00\"   {d_val:.3f}m" # %%d adalah simbol darjah dalam AutoCAD
+        with col2:
+            st.write("### 📐 Pelan Teknikal (Matplotlib):")
+            fig, ax = plt.subplots(figsize=(8, 8))
+            e_p = df['E'].tolist() + [df['E'][0]]
+            n_p = df['N'].tolist() + [df['N'][0]]
+            ax.plot(e_p, n_p, marker='o', color='b', linewidth=2)
+            ax.fill(e_p, n_p, alpha=0.2, color='skyblue')
+            ax.set_aspect('equal')
+            ax.grid(True, linestyle=':', alpha=0.6)
+            st.pyplot(fig)
 
-        # Tambah teks dengan offset sedikit dari garisan
-        msp.add_text(label, 
-                     dxfattribs={'layer': 'TEKS_SISI', 'height': 0.4, 'rotation': angle}
-                    ).set_placement((mx, my + 0.2), align=ezdxf.constants.MTEXT_CENTER)
-
-    # 6. Simpan fail
-    doc.saveas(filename)
-    print(f"Sukses! Fail '{filename}' telah dicipta.")
-
-# Jalankan fungsi eksport
-export_to_autocad(f"Lot_{LOT_NO}.dxf", points, LOT_NO, AREA_VAL, data)
+        # Butang Export GeoJSON
+        poly_coords_json = [[df['E'][i], df['N'][i]] for i in range(len(df))] + [[df['E'][0], df['N'][0]]]
+        features = [{
+            "type": "Feature",
+            "properties": {"Luas_m2": area},
+            "geometry": {"type": "Polygon", "coordinates": [poly_coords_json]}
+        }]
+        geojson_string = json.dumps({"type": "FeatureCollection", "features": features})
+        st.sidebar.download_button("📥 Muat Turun GeoJSON", geojson_string, file_name="lot_tanah.geojson")
+    else:
+        st.info("Sila muat naik fail CSV di bahagian sidebar untuk memaparkan poligon di atas satelit.")

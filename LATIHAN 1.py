@@ -28,7 +28,8 @@ def reset_password_dialog():
     pass_sah = st.text_input("Sahkan Kata Laluan Baharu:", type="password")
     
     if st.button("Simpan Kata Laluan", use_container_width=True):
-        if id_sah == "zed" and pass_baru == pass_sah and pass_baru != "":
+        # Kemaskini ID sah di sini kepada "1"
+        if id_sah == "1" and pass_baru == pass_sah and pass_baru != "":
             st.success("✅ Kata laluan berjaya dikemaskini!")
             st.rerun()
         else:
@@ -44,7 +45,8 @@ def check_password():
             st.markdown("<br>", unsafe_allow_html=True)
             
             if st.button("Log Masuk", use_container_width=True):
-                if user_id == "zed" and password == "admin123":
+                # PERUBAHAN DI SINI: Username ditukar ke "1"
+                if user_id == "1" and password == "admin123":
                     st.session_state["password_correct"] = True
                     st.rerun()
                 else:
@@ -63,8 +65,8 @@ if check_password():
         """
         <div style="background: linear-gradient(135deg, #00B4DB, #0083B0); padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 20px;">
             <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" width="80" style="border-radius: 50%; border: 3px solid white;">
-            <h3 style="color: white; margin-top: 10px; font-family: sans-serif;">Hai, Zed!</h3>
-            <p style="color: #e0e0e0; font-size: 0.8em; margin-bottom: 0px;">Surveyor Berdaftar</p>
+            <h3 style="color: white; margin-top: 10px; font-family: sans-serif;">Hai, Surveyor!</h3>
+            <p style="color: #e0e0e0; font-size: 0.8em; margin-bottom: 0px;">ID Pengguna: 1</p>
         </div>
         """, unsafe_allow_html=True
     )
@@ -97,7 +99,6 @@ if check_password():
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("🌍 Mod Peta Interaktif")
-    # Ditukar kepada True secara default
     show_interactive_map = st.sidebar.toggle("Aktifkan Peta Google", value=True)
     map_provider = st.sidebar.radio("Pilih Jenis Peta:", ["Satelit (Hybrid)", "Standard Map"], index=0, disabled=not show_interactive_map)
 
@@ -127,7 +128,7 @@ if check_password():
             
             if all(col in df.columns for col in ['STN', 'E', 'N']):
                 
-                # Transformer untuk tukar koordinat Cassini/RSO (EPSG:4390) ke WGS84 (EPSG:4326)
+                # Transformer (Contoh: Cassini Perak/Malaysia ke WGS84)
                 transformer = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
                 df['lon'], df['lat'] = transformer.transform(df['E'].values, df['N'].values)
                 
@@ -170,17 +171,15 @@ if check_password():
                 st.subheader("📐 Paparan Pelan Ukur")
 
                 if show_interactive_map:
-                    # --- MOD PETA INTERAKTIF (GOOGLE SATELLITE) ---
-                    # lyrs=y adalah Satellite Hybrid, lyrs=m adalah Standard
+                    # MOD PETA INTERAKTIF
                     tile_layer = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'
                     if map_provider == "Standard Map":
                         tile_layer = 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
 
-                    m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, max_zoom=22, tiles=tile_layer, attr='Google Satellite')
+                    m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, max_zoom=22, tiles=tile_layer, attr='Google')
                     
                     points_map = [[r['lat'], r['lon']] for _, r in df.iterrows()]
                     
-                    # Lukis Poligon
                     folium.Polygon(
                         locations=points_map, 
                         color=line_color, 
@@ -190,13 +189,11 @@ if check_password():
                         fill_opacity=poly_opacity
                     ).add_to(m)
                     
-                    # Tambah Label pada setiap sempadan (Bearing & Jarak)
                     for i in range(len(df)):
                         p1, p2 = df.iloc[i], df.iloc[(i + 1) % len(df)]
                         dE, dN = p2['E'] - p1['E'], p2['N'] - p1['N']
                         dist, bear = np.sqrt(dE**2 + dN**2), (np.degrees(np.arctan2(dE, dN)) + 360) % 360
                         
-                        # Pengiraan rotasi teks supaya selari dengan garisan
                         angle = -np.degrees(np.arctan2(p2['lat'] - p1['lat'], p2['lon'] - p1['lon']))
                         if angle > 90: angle -= 180
                         elif angle < -90: angle += 180
@@ -212,7 +209,6 @@ if check_password():
                                 </div>''')
                         ).add_to(m)
                         
-                        # Penanda Stesen
                         folium.Marker(
                             [p1['lat'], p1['lon']], 
                             icon=folium.DivIcon(html=f'''
@@ -233,7 +229,7 @@ if check_password():
                     folium_static(m, width=1000, height=600)
 
                 else:
-                    # --- MOD MATPLOTLIB (STATIC) ---
+                    # MOD MATPLOTLIB
                     if plot_theme == "Dark Mode": bg_color, grid_color = "#121212", "#555555"
                     elif plot_theme == "Blueprint": bg_color, grid_color = "#003366", "#004080"
                     else: bg_color, grid_color = "#ffffff", "#aaaaaa"
@@ -248,9 +244,6 @@ if check_password():
                         ax.xaxis.set_major_locator(plt.MultipleLocator(grid_interval))
                         ax.yaxis.set_major_locator(plt.MultipleLocator(grid_interval))
                     else: ax.axis('off')
-
-                    if show_luas_label:
-                        ax.text(centroid_m.x, centroid_m.y, f"{area:.2f} m²", fontsize=label_size_luas, fontweight='bold', color='darkgreen', ha='center', bbox=dict(boxstyle='round,pad=0.3', fc='white', alpha=0.9, ec='green'), zorder=10)
 
                     for i in range(len(df)):
                         p1, p2 = df.iloc[i], df.iloc[(i + 1) % len(df)]
@@ -276,8 +269,4 @@ if check_password():
         except Exception as e: 
             st.error(f"❌ Ada ralat teknikal: {e}")
     else:
-        # Paparan bila tiada fail dimuat naik
         st.info("👋 Sila muat naik fail CSV di bahagian tepi (sidebar) untuk memulakan pemetaan.")
-
-# Nota: Pastikan anda telah install library yang diperlukan:
-# pip install streamlit pandas matplotlib numpy shapely folium streamlit-folium pyproj

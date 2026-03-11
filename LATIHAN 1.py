@@ -9,7 +9,7 @@ from streamlit_folium import folium_static
 from pyproj import Transformer
 from shapely.geometry import Polygon, mapping
 
-# 1. Konfigurasi Halaman
+# 1. Konfigurasi Halaman (Mesti paling atas)
 st.set_page_config(page_title="Sistem Survey Lot PUO", layout="wide")
 
 # 2. Fungsi Background
@@ -22,7 +22,7 @@ def get_base64(bin_file):
 
 bg_img = get_base64("RUANG.jfif")
 
-# 3. CSS Style (DIPERBAIKI UNTUK TULISAN GELAP)
+# 3. CSS Style (DIPERBAIKI UNTUK SIDEBAR GELAP)
 st.markdown(f"""
     <style>
         .stApp {{
@@ -31,10 +31,30 @@ st.markdown(f"""
             background-position: center;
             background-attachment: fixed;
         }}
+        
+        /* --- MODIFIKASI SIDEBAR (TULISAN GELAP) --- */
         [data-testid="stSidebar"] {{
             background-color: rgba(248, 249, 250, 0.95);
             border-right: 5px solid #0083B0;
         }}
+        
+        /* Memaksa semua teks di sidebar menjadi HITAM PEKAT */
+        [data-testid="stSidebar"] .stText, 
+        [data-testid="stSidebar"] label, 
+        [data-testid="stSidebar"] p, 
+        [data-testid="stSidebar"] h1, 
+        [data-testid="stSidebar"] h2, 
+        [data-testid="stSidebar"] h3,
+        [data-testid="stSidebar"] .stMarkdown {{
+            color: #000000 !important;
+            font-weight: 700 !important;
+        }}
+
+        /* Menggelapkan teks pada Radio Button & Checkbox */
+        [data-testid="stSidebar"] .st-ae, [data-testid="stSidebar"] .st-af {{
+            color: #000000 !important;
+        }}
+
         .header-clean {{
             text-align: center;
             padding: 20px;
@@ -44,15 +64,6 @@ st.markdown(f"""
             color: white !important;
             font-size: 3em !important;
             text-shadow: 2px 2px 10px rgba(0,0,0,0.8);
-        }}
-        /* Tulisan Pengendali di Header - Warna Biru Gelap/Hitam */
-        .pengendali-text {{
-            color: #004d66 !important; 
-            font-weight: 900 !important;
-            background: rgba(255, 255, 255, 0.8);
-            padding: 5px 15px;
-            border-radius: 10px;
-            display: inline-block;
         }}
         .data-card {{
             background: rgba(255, 255, 255, 0.15);
@@ -97,15 +108,15 @@ if not st.session_state.auth:
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# 6. SIDEBAR (TULISAN PENGENDALI DIGELAPKAN)
+# 6. SIDEBAR
 with st.sidebar:
     if os.path.exists("image_b5be5f.jpg"):
         st.image("image_b5be5f.jpg")
     
-    # Tulisan ID Pengendali di Sidebar (Warna Hitam)
+    # Kotak Pengendali yang lebih gelap & jelas
     st.markdown(f"""
-        <div style='text-align:center; color:#000000; background:#e0e0e0; padding:10px; border-radius:10px; font-weight:bold; border: 2px solid #0083B0;'>
-            PENGENDALI ID: {st.session_state.user_id}
+        <div style='text-align:center; color:#FFFFFF; background:#000000; padding:10px; border-radius:10px; font-weight:bold;'>
+            PENGENDALI: {st.session_state.user_id}
         </div>
     """, unsafe_allow_html=True)
     
@@ -120,12 +131,12 @@ with st.sidebar:
     st.divider()
     uploaded_file = st.file_uploader("Muat naik fail CSV", type=["csv"])
 
-# 7. HEADER UTAMA (TULISAN PENGENDALI DIGELAPKAN)
+# 7. HEADER UTAMA
 st.markdown(f"""
     <div class="header-clean">
         <h1>SISTEM SURVEY LOT</h1>
         <p>Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p>
-        <p class="pengendali-text">PENGENDALI: MUHAMMAD ANIQ IRFAN</p>
+        <p style="color:#00d4ff !important; font-weight:bold;">PENGENDALI: MUHAMMAD ANIQ IRFAN</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -162,6 +173,7 @@ if uploaded_file:
             p2 = df.iloc[(i + 1) % len(df)]
             dist = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
             brg = (np.degrees(np.arctan2(p2['E']-p1['E'], p2['N']-p1['N'])) + 360) % 360
+            
             folium.CircleMarker([p1['lat'], p1['lon']], radius=5, color='red', fill=True).add_to(m)
             
             if show_bearing or show_distance:

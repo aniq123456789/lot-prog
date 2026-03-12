@@ -22,7 +22,7 @@ def get_base64(bin_file):
 
 bg_img = get_base64("RUANG.jfif")
 
-# 3. CSS Style (DIKEMASKINI UNTUK MULTISELECT & TEKS SIDEBAR)
+# 3. CSS Style (DIKEMASKINI)
 st.markdown(f"""
     <style>
         .stApp {{
@@ -46,13 +46,13 @@ st.markdown(f"""
             font-weight: 700 !important;
         }}
 
-        /* KHUSUS UNTUK MULTISELECT (ON/OFF STESEN) */
+        /* KHUSUS UNTUK MULTISELECT */
         span[data-baseweb="tag"] {{
-            background-color: #0083B0 !important; /* Warna kotak stesen terpilih */
+            background-color: #0083B0 !important;
             color: white !important;
         }}
         div[data-baseweb="select"] {{
-            color: black !important; /* Warna teks stesen dalam senarai */
+            color: black !important;
         }}
 
         .header-clean {{ text-align: center; padding: 20px; margin-bottom: 30px; }}
@@ -93,9 +93,8 @@ if not st.session_state.auth:
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# 6. SIDEBAR (Asas)
+# 6. SIDEBAR
 with st.sidebar:
-    if os.path.exists("image_b5be5f.jpg"): st.image("image_b5be5f.jpg")
     st.markdown(f"<div style='text-align:center; color:white; background:black; padding:10px; border-radius:10px; font-size: 0.8em;'>PENGENDALI:<br><b>{st.session_state.user_id}</b></div>", unsafe_allow_html=True)
     
     st.write("### ⚙️ Tetapan Peta")
@@ -113,90 +112,94 @@ st.markdown(f"""<div class="header-clean"><h1>SISTEM SURVEY LOT</h1><p>Politekni
 # 8. LOGIK UTAMA
 if uploaded_file:
     try:
+        # Load Data
         df = pd.read_csv(uploaded_file)
         tf = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
         df['lon'], df['lat'] = tf.transform(df['E'].values, df['N'].values)
         
-        # --- KAWALAN ON/OFF SETIAP STESEN ---
+        # --- KAWALAN ON/OFF (DIPERBAIKI) ---
         with st.sidebar:
             st.write("### 📍 Kawalan Stesen")
             stn_list = df['STN'].astype(str).tolist()
-            # Multiselect untuk pilih stesen mana nak On
+            # Gunakan session_state untuk simpan pilihan supaya tidak hilang
             selected_stn = st.multiselect(
-                "Pilih Stesen (Batu Sempadan):", 
+                "Pilih Stesen untuk ON:", 
                 options=stn_list, 
-                default=stn_list
+                default=stn_list,
+                key="stn_filter"
             )
 
         # Pengiraan Geometri
-        coords_wgs = list(zip(df['lon'], df['lat']))
         poly_points = list(zip(df['E'], df['N']))
         poly = Polygon(poly_points)
         area, perimeter = poly.area, poly.length
 
-        tab1, tab2 = st.tabs(["🗺️ Paparan Peta", "📋 Analisis & Export QGIS"])
+        tab1, tab2 = st.tabs(["🗺️ Paparan Peta", "📋 Analisis & Data"])
 
         with tab1:
             st.markdown('<div class="data-card">', unsafe_allow_html=True)
             
-            # Peta Folium
+            # Setup Map
             t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
-            m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, max_zoom=22, tiles=None)
-            folium.TileLayer(tiles=t_url, attr='Google', name='Google Maps', max_zoom=22, max_native_zoom=20).add_to(m)
+            m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, max_zoom=22)
+            folium.TileLayer(tiles=t_url, attr='Google', name='Google Maps', max_zoom=22, overlay=False, control=True).add_to(m)
             
-            # Lukis Poligon Asas (Lot)
-            folium.Polygon(locations=list(zip(df['lat'], df['lon'])), color="yellow", fill=True, fill_opacity=0.2, weight=2).add_to(m)
+            # Lukis Poligon Lot (Sentiasa ada)
+            folium.Polygon(
+                locations=list(zip(df['lat'], df['lon'])), 
+                color="yellow", fill=True, fill_opacity=0.1, weight=2
+            ).add_to(m)
 
-            # Loop untuk Marker & Label
-            for i in range(len(df)):
-                row = df.iloc[i]
-                stn_name = str(row['STN'])
+            # Lukis Batu Sempadan & Label (Hanya yang dipilih)
+            for _, row in df.iterrows():
+                stn_id = str(row['STN'])
                 
-                # LOGIK ON/OFF: Hanya lukis jika stesen ada dalam selected_stn
-                if stn_name in selected_stn:
-                    # Marker Batu Sempadan
+                if stn_id in selected_stn:
+                    # Titik Merah (Batu Sempadan)
                     folium.CircleMarker(
                         location=[row['lat'], row['lon']],
-                        radius=6, color='red', fill=True, fill_color='white', fill_opacity=1,
-                        popup=f"Stesen: {stn_name}"
+                        radius=5, color='red', fill=True, fill_color='white', fill_opacity=1,
+                        z_index=1000
                     ).add_to(m)
                     
-                    # Label Nombor Stesen
+                    # Label Nombor (Contoh: 1, 2, 3)
                     folium.Marker(
-                        [row['lat'], row['lon']],
-                        icon=folium.DivIcon(html=f'<div style="font-size:10pt; color:white; font-weight:bold; background:rgba(255,0,0,0.6); padding:2px 5px; border-radius:50%;">{stn_name}</div>')
+                        location=[row['lat'], row['lon']],
+                        icon=folium.DivIcon(
+                            icon_size=(150,36),
+                            icon_anchor=(7,20),
+                            html=f'<div style="font-size: 10pt; color: white; font-weight: bold; text-shadow: 2px 2px 4px black;">{stn_id}</div>'
+                        )
                     ).add_to(m)
 
-                # Lukis Bearing/Jarak (Antara stesen i dan i+1)
-                p1, p2 = df.iloc[i], df.iloc[(i + 1) % len(df)]
+            # Lukis Bearing & Jarak
+            for i in range(len(df)):
+                p1 = df.iloc[i]
+                p2 = df.iloc[(i + 1) % len(df)]
+                
                 if show_bearing or show_distance:
-                    mid = [(p1['lat']+p2['lat'])/2, (p1['lon']+p2['lon'])/2]
+                    mid_lat = (p1['lat'] + p2['lat']) / 2
+                    mid_lon = (p1['lon'] + p2['lon']) / 2
                     dist = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
                     brg = (np.degrees(np.arctan2(p2['E']-p1['E'], p2['N']-p1['N'])) + 360) % 360
-                    label_text = f"{format_dms(brg) if show_bearing else ''}<br>{f'{dist:.2f}m' if show_distance else ''}"
-                    folium.Marker(mid, icon=folium.DivIcon(html=f'<div style="font-size:8pt; color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">{label_text}</div>')).add_to(m)
+                    
+                    txt = f"{format_dms(brg) if show_bearing else ''}<br>{f'{dist:.2f}m' if show_distance else ''}"
+                    
+                    folium.Marker(
+                        [mid_lat, mid_lon],
+                        icon=folium.DivIcon(html=f'<div style="font-size:8pt; color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">{txt}</div>')
+                    ).add_to(m)
             
             folium_static(m, width=1100)
             st.markdown('</div>', unsafe_allow_html=True)
 
         with tab2:
             st.markdown('<div class="data-card">', unsafe_allow_html=True)
-            st.subheader("📊 Struktur Data")
-            st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']], use_container_width=True)
-            
-            # GeoJSON Export
-            features = []
-            for _, row in df.iterrows():
-                features.append({
-                    "type": "Feature",
-                    "properties": {"STN": str(row['STN'])},
-                    "geometry": {"type": "Point", "coordinates": [row['lon'], row['lat']]}
-                })
-            geojson_data = {"type": "FeatureCollection", "features": features}
-            
-            st.download_button("📥 Muat Turun GeoJSON", data=json.dumps(geojson_data), file_name="survey_lot.geojson", mime="application/json")
+            st.write(f"**Luas:** {area:.2f} m² | **Perimeter:** {perimeter:.2f} m")
+            st.dataframe(df[['STN', 'E', 'N']], use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-    except Exception as e: st.error(f"Ralat: {e}")
+    except Exception as e:
+        st.error(f"Sila pastikan fail CSV mengandungi kolum STN, E, N. Ralat: {e}")
 else:
-    st.markdown("<div class='data-card' style='text-align:center;'>👋 Sila muat naik fail CSV untuk memulakan.</div>", unsafe_allow_html=True)
+    st.info("Sila muat naik fail CSV di sidebar.")

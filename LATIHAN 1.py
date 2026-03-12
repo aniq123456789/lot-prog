@@ -22,32 +22,31 @@ def get_base64(bin_file):
 
 bg_img = get_base64("RUANG.jfif")
 
-# 3. CSS Style (DIKEMASKINI UNTUK TULISAN SIDEBAR HITAM PEKAT)
+# 3. CSS Style (Teks Sidebar Hitam & Estetik)
 st.markdown(f"""
     <style>
-        /* Background Utama */
         .stApp {{
             background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url("data:image/jfif;base64,{bg_img}");
             background-size: cover; background-position: center; background-attachment: fixed;
         }}
         
-        /* SIDEBAR: Background & Tulisan */
+        /* Sidebar styling */
         [data-testid="stSidebar"] {{
             background-color: rgba(248, 249, 250, 0.95);
             border-right: 5px solid #0083B0;
         }}
         
-        /* Paksa semua teks di sidebar jadi HITAM */
+        /* Memastikan semua elemen teks di sidebar berwarna hitam */
         [data-testid="stSidebar"] .stMarkdown p, 
         [data-testid="stSidebar"] label, 
         [data-testid="stSidebar"] span,
         [data-testid="stSidebar"] .stRadio div,
-        [data-testid="stSidebar"] .stCheckbox div {{
+        [data-testid="stSidebar"] .stCheckbox div,
+        [data-testid="stSidebar"] .stMultiSelect div {{
             color: #000000 !important;
             font-weight: 700 !important;
         }}
 
-        /* Header & Data Card */
         .header-clean {{ text-align: center; padding: 20px; margin-bottom: 30px; }}
         .header-clean h1 {{ color: white !important; font-size: 3em !important; text-shadow: 2px 2px 10px rgba(0,0,0,0.8); }}
         
@@ -57,7 +56,6 @@ st.markdown(f"""
             color: white !important; margin-bottom: 20px;
         }}
         
-        /* Warna teks tab */
         .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {{
             color: white !important;
             font-weight: bold;
@@ -86,7 +84,8 @@ if not st.session_state.auth:
         if st.button("Masuk", use_container_width=True):
             if id_user in ["1", "2", "3"] and pw_user == "admin123":
                 st.session_state.auth = True
-                st.session_state.user_id = id_user
+                # Nama Pengendali Ditetapkan
+                st.session_state.user_id = "Muhammad Aniq Irfan Bin Mohd Asmazi"
                 st.rerun()
             else: st.error("ID atau Password Salah!")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -95,7 +94,7 @@ if not st.session_state.auth:
 # 6. SIDEBAR
 with st.sidebar:
     if os.path.exists("image_b5be5f.jpg"): st.image("image_b5be5f.jpg")
-    st.markdown(f"<div style='text-align:center; color:white; background:black; padding:10px; border-radius:10px;'>PENGENDALI: {st.session_state.user_id}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:center; color:white; background:black; padding:10px; border-radius:10px; font-size: 0.8em;'>PENGENDALI:<br><b>{st.session_state.user_id}</b></div>", unsafe_allow_html=True)
     
     st.write("### ⚙️ Tetapan Peta")
     map_type = st.radio("Pilih Mod Peta:", ["Satellite", "Street View"])
@@ -104,11 +103,12 @@ with st.sidebar:
     show_bearing = st.checkbox("Papar Bearing", value=True)
     show_distance = st.checkbox("Papar Jarak", value=True)
     
+    # Placeholder untuk kawalan stesen (akan diisi jika fail dimuat naik)
     st.divider()
     uploaded_file = st.file_uploader("Muat naik fail CSV", type=["csv"])
 
 # 7. HEADER
-st.markdown("""<div class="header-clean"><h1>SISTEM SURVEY LOT</h1><p>Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p></div>""", unsafe_allow_html=True)
+st.markdown(f"""<div class="header-clean"><h1>SISTEM SURVEY LOT</h1><p>Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p><p style="color:#00d4ff;">Pengendali: {st.session_state.user_id}</p></div>""", unsafe_allow_html=True)
 
 # 8. LOGIK UTAMA
 if uploaded_file:
@@ -117,6 +117,12 @@ if uploaded_file:
         tf = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
         df['lon'], df['lat'] = tf.transform(df['E'].values, df['N'].values)
         
+        # Tambah Kawalan On/Off Stesen di Sidebar
+        with st.sidebar:
+            st.write("### 📍 Kawalan Stesen")
+            all_stn = df['STN'].astype(str).tolist()
+            selected_stn = st.multiselect("Pilih Stesen untuk Dipaparkan:", all_stn, default=all_stn)
+
         # Pengiraan Geometri
         coords_wgs = list(zip(df['lon'], df['lat']))
         poly_points = list(zip(df['E'], df['N']))
@@ -131,22 +137,39 @@ if uploaded_file:
             m1.metric("Luas (m²)", f"{area:.2f}")
             m2.metric("Ekar", f"{area/4046.856:.4f}")
             m3.metric("Perimeter (m)", f"{perimeter:.2f}")
-            m4.metric("Stesen", len(df))
+            m4.metric("Jumlah Stesen", len(df))
 
             t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
             m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, max_zoom=22, tiles=None)
             folium.TileLayer(tiles=t_url, attr='Google', name='Google Maps', max_zoom=22, max_native_zoom=20).add_to(m)
             
-            folium.Polygon(locations=list(zip(df['lat'], df['lon'])), color="yellow", fill=True, fill_opacity=0.3).add_to(m)
+            # Lukis Poligon (Sentiasa ada sebagai rujukan lot)
+            folium.Polygon(locations=list(zip(df['lat'], df['lon'])), color="yellow", fill=True, fill_opacity=0.3, weight=2).add_to(m)
 
             for i in range(len(df)):
                 p1, p2 = df.iloc[i], df.iloc[(i + 1) % len(df)]
+                
+                # Papar Marker hanya jika stesen dipilih dalam multiselect
+                if str(p1['STN']) in selected_stn:
+                    folium.CircleMarker(
+                        [p1['lat'], p1['lon']], 
+                        radius=6, color='red', fill=True, fill_color='white', fill_opacity=1,
+                        popup=f"Stesen: {p1['STN']}"
+                    ).add_to(m)
+                    
+                    # Tooltip label stesen
+                    folium.Marker(
+                        [p1['lat'], p1['lon']],
+                        icon=folium.DivIcon(html=f'<div style="font-size:10pt; color:white; font-weight:bold; background:rgba(0,0,0,0.5); padding:2px; border-radius:3px;">{p1["STN"]}</div>')
+                    ).add_to(m)
+
+                # Paparan Bearing/Jarak pada garisan
                 dist = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
                 brg = (np.degrees(np.arctan2(p2['E']-p1['E'], p2['N']-p1['N'])) + 360) % 360
-                folium.CircleMarker([p1['lat'], p1['lon']], radius=5, color='red', fill=True).add_to(m)
+                
                 if show_bearing or show_distance:
                     mid = [(p1['lat']+p2['lat'])/2, (p1['lon']+p2['lon'])/2]
-                    label = f"{format_dms(brg)}<br>{dist:.2f}m"
+                    label = f"{format_dms(brg) if show_bearing else ''}<br>{f'{dist:.2f}m' if show_distance else ''}"
                     folium.Marker(mid, icon=folium.DivIcon(html=f'<div style="font-size:8pt; color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">{label}</div>')).add_to(m)
             
             folium_static(m, width=1100)
@@ -158,12 +181,15 @@ if uploaded_file:
             
             features = []
             poly_coords = coords_wgs + [coords_wgs[0]]
+            
+            # Layer Polygon
             features.append({
                 "type": "Feature",
                 "properties": {"Layer": "Lot_Polygon", "Nama": f"LOT_{st.session_state.user_id}", "Luas_m2": round(area, 2), "Perimeter": round(perimeter, 2)},
                 "geometry": {"type": "Polygon", "coordinates": [poly_coords]}
             })
 
+            # Layer Points
             for _, row in df.iterrows():
                 features.append({
                     "type": "Feature",
@@ -171,6 +197,7 @@ if uploaded_file:
                     "geometry": {"type": "Point", "coordinates": [row['lon'], row['lat']]}
                 })
 
+            # Layer Lines
             for i in range(len(df)):
                 p1, p2 = df.iloc[i], df.iloc[(i + 1) % len(df)]
                 d = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
@@ -183,24 +210,18 @@ if uploaded_file:
 
             full_geojson = {"type": "FeatureCollection", "features": features}
 
-            col_x, col_y = st.columns(2)
-            with col_x:
-                st.write("📍 **Point Data (Batu Sempadan)**")
-                st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']].head(), use_container_width=True)
-            with col_y:
-                st.write("📐 **Atribut QGIS**")
-                st.info(f"Polygon: 1 | Lines: {len(df)} | Points: {len(df)}")
+            st.write("📍 **Data Koordinat Stesen**")
+            st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']], use_container_width=True)
 
             st.divider()
             st.download_button(
                 label="📥 MUAT TURUN FAIL UNTUK QGIS (.geojson)",
                 data=json.dumps(full_geojson, indent=4),
-                file_name=f"Survey_Lengkap_{st.session_state.user_id}.geojson",
+                file_name=f"Survey_Lengkap_AniqIrfan.geojson",
                 mime="application/json", use_container_width=True
             )
-            st.success("Nota: Fail ini mengandungi 3 layer serentak.")
             st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e: st.error(f"Ralat: {e}")
 else:
-    st.markdown("<div class='data-card' style='text-align:center;'>👋 Sila muat naik fail CSV untuk menjana data GIS.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='data-card' style='text-align:center;'>👋 Sila muat naik fail CSV untuk menjana data GIS dan kawalan stesen.</div>", unsafe_allow_html=True)

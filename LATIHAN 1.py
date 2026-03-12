@@ -22,23 +22,46 @@ def get_base64(bin_file):
 
 bg_img = get_base64("RUANG.jfif")
 
-# 3. CSS Style
+# 3. CSS Style (DIKEMASKINI UNTUK TULISAN SIDEBAR HITAM PEKAT)
 st.markdown(f"""
     <style>
+        /* Background Utama */
         .stApp {{
             background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url("data:image/jfif;base64,{bg_img}");
             background-size: cover; background-position: center; background-attachment: fixed;
         }}
-        [data-testid="stSidebar"] {{ background-color: rgba(248, 249, 250, 0.95); border-right: 5px solid #0083B0; }}
-        [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] label {{ color: #000000 !important; font-weight: 700 !important; }}
+        
+        /* SIDEBAR: Background & Tulisan */
+        [data-testid="stSidebar"] {{
+            background-color: rgba(248, 249, 250, 0.95);
+            border-right: 5px solid #0083B0;
+        }}
+        
+        /* Paksa semua teks di sidebar jadi HITAM */
+        [data-testid="stSidebar"] .stMarkdown p, 
+        [data-testid="stSidebar"] label, 
+        [data-testid="stSidebar"] span,
+        [data-testid="stSidebar"] .stRadio div,
+        [data-testid="stSidebar"] .stCheckbox div {{
+            color: #000000 !important;
+            font-weight: 700 !important;
+        }}
+
+        /* Header & Data Card */
         .header-clean {{ text-align: center; padding: 20px; margin-bottom: 30px; }}
         .header-clean h1 {{ color: white !important; font-size: 3em !important; text-shadow: 2px 2px 10px rgba(0,0,0,0.8); }}
+        
         .data-card {{
             background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px);
             padding: 25px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.2);
             color: white !important; margin-bottom: 20px;
         }}
-        .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {{ color: white !important; font-weight: bold; }}
+        
+        /* Warna teks tab */
+        .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {{
+            color: white !important;
+            font-weight: bold;
+        }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -73,9 +96,14 @@ if not st.session_state.auth:
 with st.sidebar:
     if os.path.exists("image_b5be5f.jpg"): st.image("image_b5be5f.jpg")
     st.markdown(f"<div style='text-align:center; color:white; background:black; padding:10px; border-radius:10px;'>PENGENDALI: {st.session_state.user_id}</div>", unsafe_allow_html=True)
+    
+    st.write("### ⚙️ Tetapan Peta")
     map_type = st.radio("Pilih Mod Peta:", ["Satellite", "Street View"])
+    
+    st.write("### 👁️ Paparan Data")
     show_bearing = st.checkbox("Papar Bearing", value=True)
     show_distance = st.checkbox("Papar Jarak", value=True)
+    
     st.divider()
     uploaded_file = st.file_uploader("Muat naik fail CSV", type=["csv"])
 
@@ -128,10 +156,7 @@ if uploaded_file:
             st.markdown('<div class="data-card">', unsafe_allow_html=True)
             st.subheader("📊 Struktur Data QGIS")
             
-            # --- PROSES MULTI-LAYER GEOJSON ---
             features = []
-            
-            # 1. Layer Polygon (Keluasan)
             poly_coords = coords_wgs + [coords_wgs[0]]
             features.append({
                 "type": "Feature",
@@ -139,7 +164,6 @@ if uploaded_file:
                 "geometry": {"type": "Polygon", "coordinates": [poly_coords]}
             })
 
-            # 2. Layer Batu Sempadan (Points)
             for _, row in df.iterrows():
                 features.append({
                     "type": "Feature",
@@ -147,7 +171,6 @@ if uploaded_file:
                     "geometry": {"type": "Point", "coordinates": [row['lon'], row['lat']]}
                 })
 
-            # 3. Layer Garisan (Lines dengan Bearing/Jarak)
             for i in range(len(df)):
                 p1, p2 = df.iloc[i], df.iloc[(i + 1) % len(df)]
                 d = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
@@ -175,7 +198,7 @@ if uploaded_file:
                 file_name=f"Survey_Lengkap_{st.session_state.user_id}.geojson",
                 mime="application/json", use_container_width=True
             )
-            st.success("Nota: Fail ini mengandungi 3 layer serentak. Di QGIS, gunakan 'Add Vector Layer'.")
+            st.success("Nota: Fail ini mengandungi 3 layer serentak.")
             st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e: st.error(f"Ralat: {e}")

@@ -9,7 +9,7 @@ from streamlit_folium import folium_static
 from pyproj import Transformer
 from shapely.geometry import Polygon, mapping
 
-# 1. Konfigurasi Halaman (Mesti paling atas)
+# 1. Konfigurasi Halaman
 st.set_page_config(page_title="Sistem Survey Lot PUO", layout="wide")
 
 # 2. Fungsi Background
@@ -22,7 +22,7 @@ def get_base64(bin_file):
 
 bg_img = get_base64("RUANG.jfif")
 
-# 3. CSS Style (MODIFIKASI SIDEBAR & TULISAN GELAP)
+# 3. CSS Style
 st.markdown(f"""
     <style>
         .stApp {{
@@ -31,13 +31,10 @@ st.markdown(f"""
             background-position: center;
             background-attachment: fixed;
         }}
-        
-        /* --- MODIFIKASI SIDEBAR (TULISAN GELAP) --- */
         [data-testid="stSidebar"] {{
             background-color: rgba(248, 249, 250, 0.95);
             border-right: 5px solid #0083B0;
         }}
-        
         [data-testid="stSidebar"] .stText, 
         [data-testid="stSidebar"] label, 
         [data-testid="stSidebar"] p, 
@@ -48,11 +45,9 @@ st.markdown(f"""
             color: #000000 !important;
             font-weight: 700 !important;
         }}
-
         [data-testid="stSidebar"] .st-ae, [data-testid="stSidebar"] .st-af {{
             color: #000000 !important;
         }}
-
         .header-clean {{
             text-align: center;
             padding: 20px;
@@ -123,7 +118,6 @@ with st.sidebar:
     st.write("### 👁️ Paparan Data")
     show_bearing = st.checkbox("Papar Bearing", value=True)
     show_distance = st.checkbox("Papar Jarak", value=True)
-    show_area_label = st.checkbox("Papar Label Luas", value=True)
     
     st.divider()
     uploaded_file = st.file_uploader("Muat naik fail CSV", type=["csv"])
@@ -157,9 +151,30 @@ if uploaded_file:
         m3.metric("Perimeter (m)", f"{perimeter:.2f}")
         m4.metric("Stesen", len(df))
 
+        # --- KONFIGURASI PETA ZOOM TINGGI ---
+        # y = satellite, m = street view
         t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
-        m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, tiles=t_url, attr='Google')
         
+        # Cipta peta dengan max_zoom 22
+        m = folium.Map(
+            location=[df['lat'].mean(), df['lon'].mean()], 
+            zoom_start=19,
+            max_zoom=22, 
+            tiles=None # Kita set tiles secara manual di bawah
+        )
+        
+        # Tambah Google Tiles dengan kualiti zoom maksimum
+        folium.TileLayer(
+            tiles=t_url,
+            attr='Google',
+            name='Google Maps',
+            max_zoom=22,
+            max_native_zoom=20, # Imej asal google biasanya sampai 20, folium akan "stretch" ke 22
+            overlay=False,
+            control=True
+        ).add_to(m)
+        # ------------------------------------
+
         folium.Polygon(
             locations=list(zip(df['lat'], df['lon'])),
             color="yellow", fill=True, fill_opacity=0.3, weight=3
@@ -176,11 +191,14 @@ if uploaded_file:
             if show_bearing or show_distance:
                 mid_lat, mid_lon = (p1['lat']+p2['lat'])/2, (p1['lon']+p2['lon'])/2
                 label = f"{format_dms(brg) if show_bearing else ''}<br>{f'{dist:.2f}m' if show_distance else ''}"
-                folium.Marker([mid_lat, mid_lon], icon=folium.DivIcon(html=f'<div style="font-size:8pt; color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">{label}</div>')).add_to(m)
+                folium.Marker(
+                    [mid_lat, mid_lon], 
+                    icon=folium.DivIcon(html=f'<div style="font-size:8pt; color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">{label}</div>')
+                ).add_to(m)
 
         folium_static(m, width=1100)
 
-        # 9. EKSPORT GEOJSON (BAHAGIAN DIKEMASKINI)
+        # 9. EKSPORT GEOJSON
         st.divider()
         st.write("### 📊 Jadual & Export")
         c1, c2 = st.columns([3, 1])
@@ -189,7 +207,6 @@ if uploaded_file:
             st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']], use_container_width=True)
             
         with c2:
-            # Sediakan koordinat poligon yang ditutup (titik akhir = titik mula)
             coords = list(zip(df['lon'], df['lat']))
             if coords[0] != coords[-1]:
                 coords.append(coords[0])
@@ -206,18 +223,13 @@ if uploaded_file:
                         "Perimeter_m": round(perimeter, 2),
                         "Tarikh": pd.Timestamp.now().strftime("%d/%m/%Y")
                     },
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [coords]
-                    }
+                    "geometry": { "type": "Polygon", "coordinates": [coords] }
                 }]
             }
             
-            geojson_str = json.dumps(geojson_data, indent=4)
-            
             st.download_button(
                 label="📥 Download GeoJSON (QGIS)",
-                data=geojson_str,
+                data=json.dumps(geojson_data, indent=4),
                 file_name=f"Survey_Lot_{st.session_state.user_id}.geojson",
                 mime="application/json",
                 use_container_width=True

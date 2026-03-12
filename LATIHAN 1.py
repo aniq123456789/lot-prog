@@ -22,7 +22,7 @@ def get_base64(bin_file):
 
 bg_img = get_base64("RUANG.jfif")
 
-# 3. CSS Style (Teks Sidebar Hitam & Estetik)
+# 3. CSS Style (DIKEMASKINI UNTUK MULTISELECT & TEKS SIDEBAR)
 st.markdown(f"""
     <style>
         .stApp {{
@@ -30,21 +30,29 @@ st.markdown(f"""
             background-size: cover; background-position: center; background-attachment: fixed;
         }}
         
-        /* Sidebar styling */
+        /* Sidebar Styling */
         [data-testid="stSidebar"] {{
             background-color: rgba(248, 249, 250, 0.95);
             border-right: 5px solid #0083B0;
         }}
         
-        /* Memastikan semua elemen teks di sidebar berwarna hitam */
+        /* Paksa Teks Sidebar Jadi Hitam */
         [data-testid="stSidebar"] .stMarkdown p, 
         [data-testid="stSidebar"] label, 
         [data-testid="stSidebar"] span,
         [data-testid="stSidebar"] .stRadio div,
-        [data-testid="stSidebar"] .stCheckbox div,
-        [data-testid="stSidebar"] .stMultiSelect div {{
+        [data-testid="stSidebar"] .stCheckbox div {{
             color: #000000 !important;
             font-weight: 700 !important;
+        }}
+
+        /* KHUSUS UNTUK MULTISELECT (ON/OFF STESEN) */
+        span[data-baseweb="tag"] {{
+            background-color: #0083B0 !important; /* Warna kotak stesen terpilih */
+            color: white !important;
+        }}
+        div[data-baseweb="select"] {{
+            color: black !important; /* Warna teks stesen dalam senarai */
         }}
 
         .header-clean {{ text-align: center; padding: 20px; margin-bottom: 30px; }}
@@ -54,11 +62,6 @@ st.markdown(f"""
             background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px);
             padding: 25px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.2);
             color: white !important; margin-bottom: 20px;
-        }}
-        
-        .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {{
-            color: white !important;
-            font-weight: bold;
         }}
     </style>
 """, unsafe_allow_html=True)
@@ -84,14 +87,13 @@ if not st.session_state.auth:
         if st.button("Masuk", use_container_width=True):
             if id_user in ["1", "2", "3"] and pw_user == "admin123":
                 st.session_state.auth = True
-                # Nama Pengendali Ditetapkan
                 st.session_state.user_id = "Muhammad Aniq Irfan Bin Mohd Asmazi"
                 st.rerun()
             else: st.error("ID atau Password Salah!")
         st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
-# 6. SIDEBAR
+# 6. SIDEBAR (Asas)
 with st.sidebar:
     if os.path.exists("image_b5be5f.jpg"): st.image("image_b5be5f.jpg")
     st.markdown(f"<div style='text-align:center; color:white; background:black; padding:10px; border-radius:10px; font-size: 0.8em;'>PENGENDALI:<br><b>{st.session_state.user_id}</b></div>", unsafe_allow_html=True)
@@ -102,13 +104,11 @@ with st.sidebar:
     st.write("### 👁️ Paparan Data")
     show_bearing = st.checkbox("Papar Bearing", value=True)
     show_distance = st.checkbox("Papar Jarak", value=True)
-    
-    # Placeholder untuk kawalan stesen (akan diisi jika fail dimuat naik)
     st.divider()
     uploaded_file = st.file_uploader("Muat naik fail CSV", type=["csv"])
 
 # 7. HEADER
-st.markdown(f"""<div class="header-clean"><h1>SISTEM SURVEY LOT</h1><p>Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p><p style="color:#00d4ff;">Pengendali: {st.session_state.user_id}</p></div>""", unsafe_allow_html=True)
+st.markdown(f"""<div class="header-clean"><h1>SISTEM SURVEY LOT</h1><p>Politeknik Ungku Omar | Jabatan Kejuruteraan Awam</p></div>""", unsafe_allow_html=True)
 
 # 8. LOGIK UTAMA
 if uploaded_file:
@@ -117,11 +117,16 @@ if uploaded_file:
         tf = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
         df['lon'], df['lat'] = tf.transform(df['E'].values, df['N'].values)
         
-        # Tambah Kawalan On/Off Stesen di Sidebar
+        # --- KAWALAN ON/OFF SETIAP STESEN ---
         with st.sidebar:
             st.write("### 📍 Kawalan Stesen")
-            all_stn = df['STN'].astype(str).tolist()
-            selected_stn = st.multiselect("Pilih Stesen untuk Dipaparkan:", all_stn, default=all_stn)
+            stn_list = df['STN'].astype(str).tolist()
+            # Multiselect untuk pilih stesen mana nak On
+            selected_stn = st.multiselect(
+                "Pilih Stesen (Batu Sempadan):", 
+                options=stn_list, 
+                default=stn_list
+            )
 
         # Pengiraan Geometri
         coords_wgs = list(zip(df['lon'], df['lat']))
@@ -133,95 +138,65 @@ if uploaded_file:
 
         with tab1:
             st.markdown('<div class="data-card">', unsafe_allow_html=True)
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Luas (m²)", f"{area:.2f}")
-            m2.metric("Ekar", f"{area/4046.856:.4f}")
-            m3.metric("Perimeter (m)", f"{perimeter:.2f}")
-            m4.metric("Jumlah Stesen", len(df))
-
+            
+            # Peta Folium
             t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
             m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, max_zoom=22, tiles=None)
             folium.TileLayer(tiles=t_url, attr='Google', name='Google Maps', max_zoom=22, max_native_zoom=20).add_to(m)
             
-            # Lukis Poligon (Sentiasa ada sebagai rujukan lot)
-            folium.Polygon(locations=list(zip(df['lat'], df['lon'])), color="yellow", fill=True, fill_opacity=0.3, weight=2).add_to(m)
+            # Lukis Poligon Asas (Lot)
+            folium.Polygon(locations=list(zip(df['lat'], df['lon'])), color="yellow", fill=True, fill_opacity=0.2, weight=2).add_to(m)
 
+            # Loop untuk Marker & Label
             for i in range(len(df)):
-                p1, p2 = df.iloc[i], df.iloc[(i + 1) % len(df)]
+                row = df.iloc[i]
+                stn_name = str(row['STN'])
                 
-                # Papar Marker hanya jika stesen dipilih dalam multiselect
-                if str(p1['STN']) in selected_stn:
+                # LOGIK ON/OFF: Hanya lukis jika stesen ada dalam selected_stn
+                if stn_name in selected_stn:
+                    # Marker Batu Sempadan
                     folium.CircleMarker(
-                        [p1['lat'], p1['lon']], 
+                        location=[row['lat'], row['lon']],
                         radius=6, color='red', fill=True, fill_color='white', fill_opacity=1,
-                        popup=f"Stesen: {p1['STN']}"
+                        popup=f"Stesen: {stn_name}"
                     ).add_to(m)
                     
-                    # Tooltip label stesen
+                    # Label Nombor Stesen
                     folium.Marker(
-                        [p1['lat'], p1['lon']],
-                        icon=folium.DivIcon(html=f'<div style="font-size:10pt; color:white; font-weight:bold; background:rgba(0,0,0,0.5); padding:2px; border-radius:3px;">{p1["STN"]}</div>')
+                        [row['lat'], row['lon']],
+                        icon=folium.DivIcon(html=f'<div style="font-size:10pt; color:white; font-weight:bold; background:rgba(255,0,0,0.6); padding:2px 5px; border-radius:50%;">{stn_name}</div>')
                     ).add_to(m)
 
-                # Paparan Bearing/Jarak pada garisan
-                dist = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
-                brg = (np.degrees(np.arctan2(p2['E']-p1['E'], p2['N']-p1['N'])) + 360) % 360
-                
+                # Lukis Bearing/Jarak (Antara stesen i dan i+1)
+                p1, p2 = df.iloc[i], df.iloc[(i + 1) % len(df)]
                 if show_bearing or show_distance:
                     mid = [(p1['lat']+p2['lat'])/2, (p1['lon']+p2['lon'])/2]
-                    label = f"{format_dms(brg) if show_bearing else ''}<br>{f'{dist:.2f}m' if show_distance else ''}"
-                    folium.Marker(mid, icon=folium.DivIcon(html=f'<div style="font-size:8pt; color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">{label}</div>')).add_to(m)
+                    dist = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
+                    brg = (np.degrees(np.arctan2(p2['E']-p1['E'], p2['N']-p1['N'])) + 360) % 360
+                    label_text = f"{format_dms(brg) if show_bearing else ''}<br>{f'{dist:.2f}m' if show_distance else ''}"
+                    folium.Marker(mid, icon=folium.DivIcon(html=f'<div style="font-size:8pt; color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">{label_text}</div>')).add_to(m)
             
             folium_static(m, width=1100)
             st.markdown('</div>', unsafe_allow_html=True)
 
         with tab2:
             st.markdown('<div class="data-card">', unsafe_allow_html=True)
-            st.subheader("📊 Struktur Data QGIS")
+            st.subheader("📊 Struktur Data")
+            st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']], use_container_width=True)
             
+            # GeoJSON Export
             features = []
-            poly_coords = coords_wgs + [coords_wgs[0]]
-            
-            # Layer Polygon
-            features.append({
-                "type": "Feature",
-                "properties": {"Layer": "Lot_Polygon", "Nama": f"LOT_{st.session_state.user_id}", "Luas_m2": round(area, 2), "Perimeter": round(perimeter, 2)},
-                "geometry": {"type": "Polygon", "coordinates": [poly_coords]}
-            })
-
-            # Layer Points
             for _, row in df.iterrows():
                 features.append({
                     "type": "Feature",
-                    "properties": {"Layer": "Batu_Sempadan", "Station": str(row['STN']), "Easting": row['E'], "Northing": row['N']},
+                    "properties": {"STN": str(row['STN'])},
                     "geometry": {"type": "Point", "coordinates": [row['lon'], row['lat']]}
                 })
-
-            # Layer Lines
-            for i in range(len(df)):
-                p1, p2 = df.iloc[i], df.iloc[(i + 1) % len(df)]
-                d = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
-                b = (np.degrees(np.arctan2(p2['E']-p1['E'], p2['N']-p1['N'])) + 360) % 360
-                features.append({
-                    "type": "Feature",
-                    "properties": {"Layer": "Garisan_Lot", "Dari": str(p1['STN']), "Ke": str(p2['STN']), "Bearing": format_dms(b), "Jarak_m": round(d, 2)},
-                    "geometry": {"type": "LineString", "coordinates": [[p1['lon'], p1['lat']], [p2['lon'], p2['lat']]]}
-                })
-
-            full_geojson = {"type": "FeatureCollection", "features": features}
-
-            st.write("📍 **Data Koordinat Stesen**")
-            st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']], use_container_width=True)
-
-            st.divider()
-            st.download_button(
-                label="📥 MUAT TURUN FAIL UNTUK QGIS (.geojson)",
-                data=json.dumps(full_geojson, indent=4),
-                file_name=f"Survey_Lengkap_AniqIrfan.geojson",
-                mime="application/json", use_container_width=True
-            )
+            geojson_data = {"type": "FeatureCollection", "features": features}
+            
+            st.download_button("📥 Muat Turun GeoJSON", data=json.dumps(geojson_data), file_name="survey_lot.geojson", mime="application/json")
             st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e: st.error(f"Ralat: {e}")
 else:
-    st.markdown("<div class='data-card' style='text-align:center;'>👋 Sila muat naik fail CSV untuk menjana data GIS dan kawalan stesen.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='data-card' style='text-align:center;'>👋 Sila muat naik fail CSV untuk memulakan.</div>", unsafe_allow_html=True)

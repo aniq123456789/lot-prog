@@ -65,9 +65,15 @@ st.markdown(f"""
             border-radius: 15px;
             border: 1px solid rgba(255,255,255,0.2);
             color: white !important;
+            margin-bottom: 20px;
         }}
         [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {{
             color: white !important;
+        }}
+        /* Warna teks tab */
+        .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {{
+            color: white !important;
+            font-weight: bold;
         }}
     </style>
 """, unsafe_allow_html=True)
@@ -135,6 +141,7 @@ st.markdown(f"""
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
+        # Transformasi ke WGS84
         tf = Transformer.from_crs("EPSG:4390", "EPSG:4326", always_xy=True)
         df['lon'], df['lat'] = tf.transform(df['E'].values, df['N'].values)
         
@@ -142,100 +149,97 @@ if uploaded_file:
         poly = Polygon(poly_points)
         area = poly.area
         perimeter = poly.length
-        
-        st.markdown('<div class="data-card">', unsafe_allow_html=True)
-        
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Luas (m²)", f"{area:.2f}")
-        m2.metric("Ekar", f"{area/4046.856:.4f}")
-        m3.metric("Perimeter (m)", f"{perimeter:.2f}")
-        m4.metric("Stesen", len(df))
 
-        # --- KONFIGURASI PETA ZOOM TINGGI ---
-        # y = satellite, m = street view
-        t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
-        
-        # Cipta peta dengan max_zoom 22
-        m = folium.Map(
-            location=[df['lat'].mean(), df['lon'].mean()], 
-            zoom_start=19,
-            max_zoom=22, 
-            tiles=None # Kita set tiles secara manual di bawah
-        )
-        
-        # Tambah Google Tiles dengan kualiti zoom maksimum
-        folium.TileLayer(
-            tiles=t_url,
-            attr='Google',
-            name='Google Maps',
-            max_zoom=22,
-            max_native_zoom=20, # Imej asal google biasanya sampai 20, folium akan "stretch" ke 22
-            overlay=False,
-            control=True
-        ).add_to(m)
-        # ------------------------------------
+        # Menggunakan TABS untuk susun atur
+        tab1, tab2 = st.tabs(["🗺️ Paparan Peta", "📋 Analisis Data & Export"])
 
-        folium.Polygon(
-            locations=list(zip(df['lat'], df['lon'])),
-            color="yellow", fill=True, fill_opacity=0.3, weight=3
-        ).add_to(m)
+        with tab1:
+            st.markdown('<div class="data-card">', unsafe_allow_html=True)
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Luas (m²)", f"{area:.2f}")
+            m2.metric("Ekar", f"{area/4046.856:.4f}")
+            m3.metric("Perimeter (m)", f"{perimeter:.2f}")
+            m4.metric("Stesen", len(df))
 
-        for i in range(len(df)):
-            p1 = df.iloc[i]
-            p2 = df.iloc[(i + 1) % len(df)]
-            dist = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
-            brg = (np.degrees(np.arctan2(p2['E']-p1['E'], p2['N']-p1['N'])) + 360) % 360
+            t_url = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}' if map_type == "Satellite" else 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
+            m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=19, max_zoom=22, tiles=None)
             
-            folium.CircleMarker([p1['lat'], p1['lon']], radius=5, color='red', fill=True).add_to(m)
-            
-            if show_bearing or show_distance:
-                mid_lat, mid_lon = (p1['lat']+p2['lat'])/2, (p1['lon']+p2['lon'])/2
-                label = f"{format_dms(brg) if show_bearing else ''}<br>{f'{dist:.2f}m' if show_distance else ''}"
-                folium.Marker(
-                    [mid_lat, mid_lon], 
-                    icon=folium.DivIcon(html=f'<div style="font-size:8pt; color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">{label}</div>')
-                ).add_to(m)
+            folium.TileLayer(tiles=t_url, attr='Google', name='Google Maps', max_zoom=22, max_native_zoom=20).add_to(m)
 
-        folium_static(m, width=1100)
+            folium.Polygon(locations=list(zip(df['lat'], df['lon'])), color="yellow", fill=True, fill_opacity=0.3, weight=3).add_to(m)
 
-        # 9. EKSPORT GEOJSON
-        st.divider()
-        st.write("### 📊 Jadual & Export")
-        c1, c2 = st.columns([3, 1])
-        
-        with c1:
-            st.dataframe(df[['STN', 'E', 'N', 'lat', 'lon']], use_container_width=True)
-            
-        with c2:
-            coords = list(zip(df['lon'], df['lat']))
-            if coords[0] != coords[-1]:
-                coords.append(coords[0])
+            for i in range(len(df)):
+                p1 = df.iloc[i]
+                p2 = df.iloc[(i + 1) % len(df)]
+                dist = np.sqrt((p2['E']-p1['E'])**2 + (p2['N']-p1['N'])**2)
+                brg = (np.degrees(np.arctan2(p2['E']-p1['E'], p2['N']-p1['N'])) + 360) % 360
+                folium.CircleMarker([p1['lat'], p1['lon']], radius=5, color='red', fill=True).add_to(m)
+                
+                if show_bearing or show_distance:
+                    mid_lat, mid_lon = (p1['lat']+p2['lat'])/2, (p1['lon']+p2['lon'])/2
+                    label = f"{format_dms(brg) if show_bearing else ''}<br>{f'{dist:.2f}m' if show_distance else ''}"
+                    folium.Marker([mid_lat, mid_lon], icon=folium.DivIcon(html=f'<div style="font-size:8pt; color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">{label}</div>')).add_to(m)
 
-            geojson_data = {
-                "type": "FeatureCollection",
-                "crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-                "features": [{
-                    "type": "Feature",
-                    "properties": {
-                        "Pengendali": st.session_state.user_id,
-                        "Luas_m2": round(area, 2),
-                        "Ekar": round(area/4046.856, 4),
-                        "Perimeter_m": round(perimeter, 2),
-                        "Tarikh": pd.Timestamp.now().strftime("%d/%m/%Y")
-                    },
-                    "geometry": { "type": "Polygon", "coordinates": [coords] }
-                }]
-            }
+            folium_static(m, width=1100)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        with tab2:
+            st.markdown('<div class="data-card">', unsafe_allow_html=True)
+            st.subheader("📋 Analisis Data Sebelum Eksport")
             
-            st.download_button(
-                label="📥 Download GeoJSON (QGIS)",
-                data=json.dumps(geojson_data, indent=4),
-                file_name=f"Survey_Lot_{st.session_state.user_id}.geojson",
-                mime="application/json",
-                use_container_width=True
-            )
+            col_a, col_b = st.columns([2, 1])
             
-        st.markdown('</div>', unsafe_allow_html=True)
+            with col_a:
+                st.write("🌍 **Koordinat Geografik (WGS84) untuk GPS:**")
+                # Menunjukkan koordinat WGS84 untuk kegunaan lapangan
+                st.dataframe(df[['STN', 'lat', 'lon']].head(10), use_container_width=True)
+            
+            with col_b:
+                st.write("📊 **Ringkasan Geometri:**")
+                # Simulasi ringkasan feature (Poligon Lot)
+                ringkasan = pd.DataFrame({
+                    'Jenis Geometri': ['Polygon (Lot)', 'Point (Station)'],
+                    'Bilangan': [1, len(df)]
+                })
+                st.table(ringkasan)
+
+            st.divider()
+            
+            # Bahagian Export
+            st.write("### 🚀 Export Fail")
+            c1, c2 = st.columns([2, 1])
+            with c1:
+                st.write("Data mentah (Cassini):")
+                st.dataframe(df[['STN', 'E', 'N']], height=200, use_container_width=True)
+            
+            with c2:
+                coords = list(zip(df['lon'], df['lat']))
+                if coords[0] != coords[-1]: coords.append(coords[0])
+
+                geojson_data = {
+                    "type": "FeatureCollection",
+                    "crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+                    "features": [{
+                        "type": "Feature",
+                        "properties": {
+                            "Pengendali": st.session_state.user_id,
+                            "Luas_m2": round(area, 2),
+                            "Ekar": round(area/4046.856, 4),
+                            "Perimeter_m": round(perimeter, 2),
+                            "Tarikh": pd.Timestamp.now().strftime("%d/%m/%Y")
+                        },
+                        "geometry": { "type": "Polygon", "coordinates": [coords] }
+                    }]
+                }
+                
+                st.download_button(
+                    label="📥 Download GeoJSON (QGIS)",
+                    data=json.dumps(geojson_data, indent=4),
+                    file_name=f"Survey_Lot_{st.session_state.user_id}.geojson",
+                    mime="application/json",
+                    use_container_width=True
+                )
+            st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Ralat pemprosesan data: {e}")
